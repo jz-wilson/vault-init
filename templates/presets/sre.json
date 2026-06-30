@@ -1,0 +1,11 @@
+{
+  "items": [
+    { "value": "runbook", "dir": "runbooks", "bucket": "semantic", "label": "runbooks/ (operational procedures)", "selected": true },
+    { "value": "service", "dir": "services", "bucket": "semantic", "label": "services/ (per-service facts)", "selected": true },
+    { "value": "project", "dir": "projects", "bucket": "semantic", "label": "projects/ (ongoing work)", "selected": true },
+    { "value": "incident", "dir": "incidents", "bucket": "episodic", "label": "incidents/ (monthly incident log)", "selected": true },
+    { "value": "decision", "dir": "decisions", "bucket": "episodic", "label": "decisions/ (monthly decision log)", "selected": true },
+    { "value": "postmortem", "dir": "postmortems", "bucket": "extra", "label": "postmortems/ (freeform writeups)", "selected": true },
+    { "value": "oncall", "dir": "oncall", "bucket": "extra", "label": "oncall/ (handoff notes)", "selected": false }
+  ]
+}

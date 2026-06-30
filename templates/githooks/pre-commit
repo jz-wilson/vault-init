@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Validate agent logs before commit. Closes nothing if you commit via a path that
+# skips hooks — the CI workflow is the backstop for that (see .forgejo/workflows/).
+set -euo pipefail
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "pre-commit: bun not found — skipping log validation (install bun to enforce)" >&2
+  exit 0
+fi
+
+cd "$(git rev-parse --show-toplevel)"
+bun scripts/validate-logs.ts

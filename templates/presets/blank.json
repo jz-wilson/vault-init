@@ -1,0 +1,6 @@
+{
+  "items": [
+    { "value": "project", "dir": "projects", "bucket": "semantic", "label": "projects/ (ongoing work)", "selected": true },
+    { "value": "decision", "dir": "decisions", "bucket": "episodic", "label": "decisions/ (monthly log)", "selected": true }
+  ]
+}

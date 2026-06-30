@@ -1,0 +1,17 @@
+{
+  "name": "vault-init",
+  "version": "0.1.0",
+  "description": "Scaffold an agent-coordination + memory vault (homelab or SRE presets)",
+  "type": "module",
+  "bin": { "vault-init": "src/init.ts" },
+  "files": ["src", "templates"],
+  "scripts": { "test": "bun test" },
+  "dependencies": { "@clack/prompts": "^0.7.0" },
+  "engines": { "bun": ">=1.1.0" },
+  "keywords": ["obsidian", "vault", "ai-agents", "scaffold", "cli", "memory", "bun"],
+  "license": "MIT",
+  "author": "Johnzell Wilson",
+  "repository": { "type": "git", "url": "git+https://github.com/jz-wilson/vault-init.git" },
+  "homepage": "https://github.com/jz-wilson/vault-init#readme",
+  "bugs": { "url": "https://github.com/jz-wilson/vault-init/issues" }
+}

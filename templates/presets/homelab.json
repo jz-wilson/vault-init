@@ -1,0 +1,9 @@
+{
+  "items": [
+    { "value": "project", "dir": "projects", "bucket": "semantic", "label": "projects/ (ongoing work)", "selected": true },
+    { "value": "infra", "dir": "infrastructure", "bucket": "semantic", "label": "infrastructure/ (homelab facts)", "selected": true },
+    { "value": "glossary", "dir": "glossary", "bucket": "semantic", "label": "glossary/ (term definitions)", "selected": false },
+    { "value": "decision", "dir": "decisions", "bucket": "episodic", "label": "decisions/ (monthly decision log)", "selected": true },
+    { "value": "personal", "dir": "personal", "bucket": "extra", "label": "personal/ (secret-sensitive)", "selected": false }
+  ]
+}

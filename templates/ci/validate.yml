@@ -1,0 +1,13 @@
+# Server-side schema gate (Q4): runs on push regardless of how the commit was made,
+# closing the local-hook bypass (MCP/API writes never run .githooks).
+name: validate
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun scripts/validate-logs.ts
+      - run: bun scripts/validate-vault.ts
