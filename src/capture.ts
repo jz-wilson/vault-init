@@ -43,17 +43,22 @@ export function createNote(d: Derived, path: string, noteType: string, noteName:
   writeFileSync(path, content, "utf8");
 }
 
-/** Insert index inside ## Notes: the next '## ' heading (or EOF). */
+/** Insert index inside ## Notes: right after the last existing bullet (or the heading itself),
+ *  before any blank-line-then-next-heading — keeps that separating blank line intact. */
 function findNotesInsertIdx(lines: string[]): number {
   let inNotes = false;
+  let idx = lines.length;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i] === "## Notes") {
       inNotes = true;
+      idx = i + 1;
       continue;
     }
-    if (inNotes && lines[i].startsWith("## ")) return i;
+    if (!inNotes) continue;
+    if (lines[i].startsWith("## ")) return idx;
+    if (lines[i].startsWith("- ")) idx = i + 1;
   }
-  return lines.length;
+  return idx;
 }
 
 export function insertBullet(path: string, fact: string, today: Date, vaultRoot: string, validTypes: Set<string>): void {
@@ -101,6 +106,10 @@ function main() {
 
   if (!type || !fact) {
     console.error("usage: capture.ts --type <type> [--note <name>] \"<fact>\"");
+    process.exit(2);
+  }
+  if (fact.includes("\n")) {
+    console.error("error: fact must be a single line (no newlines)");
     process.exit(2);
   }
   const isSemantic = type in d.SEMANTIC_DIRS;

@@ -4,6 +4,7 @@
 // Non-interactive: bunx vault-init --yes --preset sre --name work --dir ./work-vault
 import { mkdirSync, writeFileSync, copyFileSync, existsSync, chmodSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, join, dirname, sep } from "node:path";
+import { homedir } from "node:os";
 
 const SRC = import.meta.dir; // package/src — holds the operational .ts to vendor
 const PKG = resolve(SRC, ".."); // package root — holds templates/
@@ -85,16 +86,30 @@ async function interactive() {
       chosen.push({ value: d, dir: d, bucket: "extra", label: d, selected: true });
   }
 
-  const dir = await p.text({ message: "Target directory", defaultValue: `./${name}` });
+  const defaultDir = join(homedir(), name as string);
+  const dir = await p.text({ message: "Target directory", placeholder: defaultDir, defaultValue: defaultDir });
   if (p.isCancel(dir)) { p.cancel("cancelled"); process.exit(1); }
 
+  const target = resolve(dir as string);
+  let force = false;
+  if (existsSync(target) && readdirSync(target).length > 0) {
+    const overwrite = await p.confirm({ message: `${dir} already exists and is not empty — overwrite?`, initialValue: false });
+    if (p.isCancel(overwrite) || !overwrite) { p.cancel("cancelled"); process.exit(1); }
+    force = true;
+  }
   try {
-    scaffold(resolve(dir as string), buildConfig(name as string, chosen), true);
+    scaffold(target, buildConfig(name as string, chosen), true, force);
   } catch (e: any) {
     p.cancel(e.message);
     process.exit(1);
   }
-  p.outro(`Done. cd ${dir} and read SEED-PROMPT.md to populate it with an AI.`);
+  p.outro(`Done. Read SEED-PROMPT.md to populate it with an AI.`);
+
+  const switchNow = await p.confirm({ message: `Switch to ${dir} now?`, initialValue: true });
+  if (!p.isCancel(switchNow) && switchNow) {
+    console.log(`(dropping into a shell in ${target} — exit to return)`);
+    Bun.spawnSync([process.env.SHELL || "bash"], { cwd: target, stdio: ["inherit", "inherit", "inherit"] });
+  }
 }
 
 function scaffold(target: string, config: ReturnType<typeof buildConfig>, examples: boolean, force = false) {
@@ -102,7 +117,7 @@ function scaffold(target: string, config: ReturnType<typeof buildConfig>, exampl
     throw new Error(`target directory '${target}' already exists and is not empty — pass --force to overwrite`);
 
   const allDirs = [
-    "agents", "dashboard", "handoffs", "scripts", ".githooks", ".forgejo/workflows", "docs/agents",
+    "agents", "dashboard", "handoffs", "scripts", ".githooks", ".forgejo/workflows",
     ...Object.values(config.semantic_dirs), ...Object.values(config.episodic_dirs), ...config.extra_dirs,
   ];
   for (const d of allDirs) mkdirSync(safeJoin(target, d), { recursive: true });
@@ -169,11 +184,11 @@ async function main() {
   const f = parseFlags(process.argv.slice(2));
   if (!f.yes) { await interactive(); return; }
 
-  const name = (f.name as string) ?? "vault";
-  const preset = (f.preset as string) ?? "blank";
-  const target = resolve((f.dir as string) ?? `./${name}`);
-  const items = loadPreset(preset).items.filter((it) => it.selected);
+  const name = (f.name as string) || "vault";
+  const preset = (f.preset as string) || "blank";
+  const target = resolve((f.dir as string) || join(homedir(), name));
   try {
+    const items = loadPreset(preset).items.filter((it) => it.selected);
     scaffold(target, buildConfig(name, items), !f.noExamples, Boolean(f.force));
   } catch (e: any) {
     console.error(`error: ${e.message}`);

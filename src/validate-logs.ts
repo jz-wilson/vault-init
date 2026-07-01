@@ -2,11 +2,11 @@
 // Agent-log validator. Port of validate-agent-logs.py.
 //   no args  -> scan agents/**/reports/*.md (excluding archive/)
 //   file args -> validate only those files
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { relative, resolve, basename } from "node:path";
 import {
-  DATE_RE, parseFrontmatter, extractField, fmLineNo, checkBodyPaths, splitLines,
-  type LineError,
+  DATE_RE, extractField, fmLineNo, checkBodyPaths, isValidCalendarDate,
+  validateCommonNoteShape, type LineError,
 } from "./frontmatter.ts";
 
 const REQUIRED_FIELDS = ["updated", "tags", "type", "agent", "status", "task", "priority", "date"];
@@ -25,31 +25,10 @@ export function validateAgentLog(path: string, vaultRoot: string): [string, Line
   if (!FILENAME_RE.test(fname))
     errors.push([1, `filename does not match YYYY-MM-DD-slug.md pattern: ${fname}`]);
 
-  let raw: Buffer;
-  try {
-    raw = readFileSync(path);
-  } catch (e) {
-    errors.push([1, `cannot read file: ${e}`]);
-    return [rel, errors];
-  }
-
-  const text = raw.toString("utf8");
-  if (!text.endsWith("\n")) errors.push([0, "file does not end with a newline"]);
-  else if (text.endsWith("\n\n")) errors.push([0, "file has trailing blank lines (must end with exactly one newline)"]);
-
-  const nlines = splitLines(text);
-  if (nlines.length === 0 || nlines[0] !== "---") {
-    errors.push([1, "file does not start with '---' frontmatter delimiter"]);
-    return [rel, errors];
-  }
-
-  const parsed = parseFrontmatter(nlines);
-  if (parsed === null) {
-    errors.push([1, "frontmatter opening '---' has no matching closing '---'"]);
-    return [rel, errors];
-  }
-  const { fm, body, closeLineNo } = parsed;
-  const fmStart = 2;
+  const { errors: shapeErrors, shape } = validateCommonNoteShape(path);
+  errors.push(...shapeErrors);
+  if (shape === null) return [rel, errors];
+  const { fm, body, closeLineNo, fmStart } = shape;
 
   for (const field of REQUIRED_FIELDS)
     if (extractField(fm, field) === null)
@@ -71,6 +50,8 @@ export function validateAgentLog(path: string, vaultRoot: string): [string, Line
     const val = extractField(fm, field);
     if (val !== null && !DATE_RE.test(val))
       errors.push([fmLineNo(fm, field, fmStart), `'${field}' must match YYYY-MM-DD, got: '${val}'`]);
+    else if (val !== null && !isValidCalendarDate(val))
+      errors.push([fmLineNo(fm, field, fmStart), `'${field}' is not a real calendar date: '${val}'`]);
   }
 
   const tagsVal = extractField(fm, "tags");
@@ -123,7 +104,7 @@ function main() {
     }
   }
 
-  if (count === 0) {
+  if (targets.length === 0) {
     console.log("No files found.");
     process.exit(0);
   }

@@ -1,6 +1,6 @@
 // vault.config.json loader + derived layout. The ONE place dir names are configurable.
-import { readFileSync, existsSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 
 // Types always valid regardless of config (the fixed spine + universal note kinds).
 const UNIVERSAL_TYPES = ["agent-log", "handoff", "concept", "reference", "glossary", "personal"];
@@ -24,26 +24,24 @@ export interface Derived {
   ALL_DIRS: string[];
 }
 
-/** Walk up from a starting dir until vault.config.json is found; fallback to parent-of-start. */
-export function findVaultRoot(start: string): string {
-  let dir = resolve(start);
-  for (;;) {
-    if (existsSync(join(dir, "vault.config.json"))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return dirname(resolve(start));
+/** Reject any configured dir value that resolves outside vaultRoot (path traversal via vault.config.json). */
+function assertInsideVault(vaultRoot: string, label: string, dir: string): void {
+  const full = resolve(vaultRoot, dir);
+  if (full !== vaultRoot && !full.startsWith(vaultRoot + sep))
+    throw new Error(`vault.config.json: ${label} '${dir}' escapes the vault root`);
 }
 
 export function loadConfig(vaultRoot: string): VaultConfig {
   const raw = JSON.parse(readFileSync(join(vaultRoot, "vault.config.json"), "utf8"));
-  return {
-    name: raw.name ?? "vault",
-    semantic_dirs: raw.semantic_dirs ?? {},
-    episodic_dirs: raw.episodic_dirs ?? {},
-    extra_dirs: raw.extra_dirs ?? [],
-  };
+  const semantic_dirs: Record<string, string> = raw.semantic_dirs ?? {};
+  const episodic_dirs: Record<string, string> = raw.episodic_dirs ?? {};
+  const extra_dirs: string[] = raw.extra_dirs ?? [];
+
+  for (const [type, dir] of Object.entries(semantic_dirs)) assertInsideVault(vaultRoot, `semantic_dirs.${type}`, dir);
+  for (const [type, dir] of Object.entries(episodic_dirs)) assertInsideVault(vaultRoot, `episodic_dirs.${type}`, dir);
+  for (const dir of extra_dirs) assertInsideVault(vaultRoot, "extra_dirs", dir);
+
+  return { name: raw.name ?? "vault", semantic_dirs, episodic_dirs, extra_dirs };
 }
 
 export function derive(cfg: VaultConfig): Derived {

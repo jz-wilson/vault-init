@@ -1,5 +1,6 @@
 // Shared frontmatter parsing primitives. Port of vault_fm.py.
 // Operates on arrays of lines WITHOUT trailing newline chars.
+import { readFileSync } from "node:fs";
 
 export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const FILE_URL_RE = /file:\/\//;
@@ -14,11 +15,18 @@ export interface ParsedFm {
   closeLineNo: number; // 1-based file line of the closing ---
 }
 
-/** Split text into lines without newline chars, mirroring Python splitlines(). */
+/** Split text into lines without newline chars, mirroring Python splitlines() (handles CRLF). */
 export function splitLines(text: string): string[] {
-  const lines = text.split("\n");
+  const lines = text.split("\n").map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
   if (lines.length && lines[lines.length - 1] === "") lines.pop();
   return lines;
+}
+
+/** True if `val` (already DATE_RE-matched) is a real calendar date, not a JS-normalized overflow (e.g. 2026-02-30). */
+export function isValidCalendarDate(val: string): boolean {
+  const [y, m, day] = val.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, day));
+  return d.getUTCFullYear() === y && d.getUTCMonth() === m - 1 && d.getUTCDate() === day;
 }
 
 export function parseFrontmatter(lines: string[]): ParsedFm | null {
@@ -87,6 +95,44 @@ export function extractTagsList(fm: string[]): string[] | null {
 }
 
 export type LineError = [number, string];
+
+export interface NoteShape {
+  fm: string[];
+  body: string[];
+  closeLineNo: number;
+  fmStart: number;
+}
+
+/** Readable/trailing-newline/frontmatter-delimiter check shared by validate-logs.ts and
+ *  validate-vault.ts. `shape` is null when a fatal shape error means parsing can't continue —
+ *  `errors` is always populated in that case. */
+export function validateCommonNoteShape(path: string): { errors: LineError[]; shape: NoteShape | null } {
+  const errors: LineError[] = [];
+  let raw: Buffer;
+  try {
+    raw = readFileSync(path);
+  } catch (e) {
+    errors.push([1, `cannot read file: ${e}`]);
+    return { errors, shape: null };
+  }
+
+  const text = raw.toString("utf8");
+  if (!text.endsWith("\n")) errors.push([0, "file does not end with a newline"]);
+  else if (text.endsWith("\n\n")) errors.push([0, "file has trailing blank lines (must end with exactly one newline)"]);
+
+  const nlines = splitLines(text);
+  if (nlines.length === 0 || nlines[0] !== "---") {
+    errors.push([1, "file does not start with '---' frontmatter delimiter"]);
+    return { errors, shape: null };
+  }
+
+  const parsed = parseFrontmatter(nlines);
+  if (parsed === null) {
+    errors.push([1, "frontmatter opening '---' has no matching closing '---'"]);
+    return { errors, shape: null };
+  }
+  return { errors, shape: { fm: parsed.fm, body: parsed.body, closeLineNo: parsed.closeLineNo, fmStart: 2 } };
+}
 
 export function checkBodyPaths(body: string[], startLineNo: number): LineError[] {
   const errors: LineError[] = [];

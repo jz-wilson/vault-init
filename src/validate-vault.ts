@@ -5,8 +5,8 @@
 import { readFileSync, existsSync } from "node:fs";
 import { relative, resolve, basename } from "node:path";
 import {
-  DATE_RE, parseFrontmatter, extractField, fmLineNo, extractTagsList,
-  checkBodyPaths, splitLines, type LineError,
+  DATE_RE, extractField, fmLineNo, extractTagsList, isValidCalendarDate,
+  checkBodyPaths, splitLines, validateCommonNoteShape, parseFrontmatter, type LineError,
 } from "./frontmatter.ts";
 import { loadFromScript } from "./config.ts";
 import { validateAgentLog } from "./validate-logs.ts";
@@ -35,36 +35,17 @@ export function validateVaultNote(path: string, vaultRoot: string, validTypes: S
   const errors: LineError[] = [];
   const rel = relative(vaultRoot, path);
 
-  let raw: Buffer;
-  try {
-    raw = readFileSync(path);
-  } catch (e) {
-    errors.push([1, `cannot read file: ${e}`]);
-    return [rel, errors];
-  }
-
-  const text = raw.toString("utf8");
-  if (!text.endsWith("\n")) errors.push([0, "file does not end with a newline"]);
-  else if (text.endsWith("\n\n")) errors.push([0, "file has trailing blank lines (must end with exactly one newline)"]);
-
-  const nlines = splitLines(text);
-  if (nlines.length === 0 || nlines[0] !== "---") {
-    errors.push([1, "file does not start with '---' frontmatter delimiter"]);
-    return [rel, errors];
-  }
-
-  const parsed = parseFrontmatter(nlines);
-  if (parsed === null) {
-    errors.push([1, "frontmatter opening '---' has no matching closing '---'"]);
-    return [rel, errors];
-  }
-  const { fm, body, closeLineNo } = parsed;
-  const fmStart = 2;
+  const { errors: shapeErrors, shape } = validateCommonNoteShape(path);
+  errors.push(...shapeErrors);
+  if (shape === null) return [rel, errors];
+  const { fm, body, closeLineNo, fmStart } = shape;
 
   const updatedVal = extractField(fm, "updated");
   if (updatedVal === null) errors.push([fmStart, "missing required frontmatter field: 'updated'"]);
   else if (!DATE_RE.test(updatedVal))
     errors.push([fmLineNo(fm, "updated", fmStart), `'updated' must match YYYY-MM-DD, got: '${updatedVal}'`]);
+  else if (!isValidCalendarDate(updatedVal))
+    errors.push([fmLineNo(fm, "updated", fmStart), `'updated' is not a real calendar date: '${updatedVal}'`]);
 
   for (const e of validateTags(fm, fmStart)) errors.push(e);
 
@@ -105,8 +86,9 @@ function main() {
   const args = process.argv.slice(2);
   const vaultRoot = resolve(import.meta.dir, "..");
   const { VALID_TYPES } = loadFromScript(import.meta.dir);
+  const explicit = args.length > 0;
 
-  const targets = args.length
+  const targets = explicit
     ? args.map((a) => resolve(a)).sort()
     : [...new Bun.Glob("**/*.md").scanSync(vaultRoot)].map((p) => resolve(vaultRoot, p)).sort();
 
@@ -119,7 +101,8 @@ function main() {
       continue;
     }
     const rel = relative(vaultRoot, path);
-    if (shouldSkip(rel)) continue;
+    // shouldSkip is a full-scan filter — an explicitly named file is always checked.
+    if (!explicit && shouldSkip(rel)) continue;
 
     const [r, errs] = isAgentLog(path)
       ? validateAgentLog(path, vaultRoot)

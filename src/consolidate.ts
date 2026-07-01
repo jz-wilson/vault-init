@@ -6,7 +6,7 @@
 //   consolidate.ts --archive-only
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { relative, resolve, join, basename, dirname } from "node:path";
-import { parseFrontmatter, extractField, splitLines } from "./frontmatter.ts";
+import { parseFrontmatter, extractField, splitLines, isValidCalendarDate } from "./frontmatter.ts";
 import { loadFromScript, type Derived } from "./config.ts";
 import { findAgentLogs } from "./validate-logs.ts";
 
@@ -14,7 +14,7 @@ const ARCHIVE_THRESHOLD_DAYS = 90;
 const WIKI_LINK_RE = /\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g;
 
 function dateOrNull(val: string | null): Date | null {
-  if (!val || !/^\d{4}-\d{2}-\d{2}$/.test(val)) return null;
+  if (!val || !/^\d{4}-\d{2}-\d{2}$/.test(val) || !isValidCalendarDate(val)) return null;
   const d = new Date(val + "T00:00:00Z");
   return isNaN(d.getTime()) ? null : d;
 }
@@ -77,28 +77,35 @@ export function findArchivalCandidates(d: Derived, vaultRoot: string, today: Dat
   return out;
 }
 
-function archiveLogs(candidates: [string, string][], vaultRoot: string, apply: boolean): void {
+function archiveLogs(candidates: [string, string][], vaultRoot: string, apply: boolean): boolean {
   if (!candidates.length) {
     console.log("archive: 0 candidates (nothing to do)");
-    return;
+    return true;
   }
   console.log(`archive: ${candidates.length} candidate(s)${apply ? "" : "  [DRY RUN — use --apply to execute]"}`);
+  let ok = true;
   for (const [path, agentName] of candidates) {
     const archiveDir = join(vaultRoot, "agents", agentName, "reports", "archive");
     const dest = join(archiveDir, basename(path));
     if (apply) {
       mkdirSync(archiveDir, { recursive: true });
       const r = Bun.spawnSync(["git", "mv", relative(vaultRoot, path), relative(vaultRoot, dest)], { cwd: vaultRoot });
-      if (r.exitCode !== 0) console.log(`  ERROR git mv ${basename(path)}: ${r.stderr.toString().trim()}`);
-      else console.log(`  archived → ${relative(vaultRoot, dest)}`);
+      if (r.exitCode !== 0) {
+        console.log(`  ERROR git mv ${basename(path)}: ${r.stderr.toString().trim()}`);
+        ok = false;
+      } else {
+        console.log(`  archived → ${relative(vaultRoot, dest)}`);
+      }
     } else {
       console.log(`  would archive → ${relative(vaultRoot, dest)}`);
     }
   }
+  return ok;
 }
 
 export function findDistillationCandidates(d: Derived, vaultRoot: string): [string, string][] {
   const pairs: [string, string][] = [];
+  const seen = new Set<string>();
   const semanticDirs = new Set(Object.values(d.SEMANTIC_DIRS));
   for (const path of findAgentLogs(vaultRoot)) {
     const f = readFm(path);
@@ -110,6 +117,9 @@ export function findDistillationCandidates(d: Derived, vaultRoot: string): [stri
       const linked = resolveWikiLink(d, vaultRoot, linkName);
       if (!linked) continue;
       if (!semanticDirs.has(basename(dirname(linked)))) continue;
+      const key = `${path}|${linked}`;
+      if (seen.has(key)) continue; // dedup: same log linking the same note via multiple [[...|x]]/[[...#y]] forms
+      seen.add(key);
       const lf = readFm(linked);
       if (!lf) continue;
       const linkedUpdated = dateOrNull(extractField(lf.fm, "updated"));
@@ -140,11 +150,12 @@ function main() {
   const d = loadFromScript(import.meta.dir);
   const today = new Date();
 
-  archiveLogs(findArchivalCandidates(d, vaultRoot, today), vaultRoot, apply);
+  const archiveOk = archiveLogs(findArchivalCandidates(d, vaultRoot, today), vaultRoot, apply);
   if (!archiveOnly) {
     console.log();
     printDistillation(findDistillationCandidates(d, vaultRoot), vaultRoot);
   }
+  if (!archiveOk) process.exit(1);
 }
 
 if (import.meta.main) main();

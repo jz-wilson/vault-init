@@ -11,8 +11,11 @@ but `bun` + `git`.
 ### Layout
 
 Directories are defined in `vault.config.json`. Fixed spine: `agents/` (task logs),
-`dashboard/`, `handoffs/`, `scripts/`. Configurable spokes: `semantic_dirs` (deduped facts),
+`dashboard/`, `scripts/`. Configurable spokes: `semantic_dirs` (deduped facts),
 `episodic_dirs` (monthly dated logs), `extra_dirs` (freeform).
+
+`handoffs/` is scaffolded too but git-ignored — local/ephemeral session handoff docs,
+never committed.
 
 ### The loop
 

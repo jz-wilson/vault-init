@@ -1,0 +1,42 @@
+version: '3'
+
+vars:
+  SMOKE_DIR: /tmp/vault-init-smoke
+
+tasks:
+  test:
+    desc: Run the bun:test suite
+    cmds:
+      - bun test
+
+  link:
+    desc: Register vault-init as a global bun link (bin at ~/.bun/bin/vault-init)
+    cmds:
+      - bun link
+
+  unlink:
+    desc: Remove the global bun link
+    cmds:
+      - bun unlink
+
+  scaffold:
+    desc: Scaffold a throwaway vault under /tmp for manual testing
+    cmds:
+      - bun src/init.ts --yes --dir {{.SMOKE_DIR}} --preset {{.PRESET | default "homelab"}} --force
+
+  dashboard:
+    desc: Run the dashboard against the smoke vault
+    dir: '{{.SMOKE_DIR}}'
+    cmds:
+      - bun scripts/dashboard.ts
+
+  watch:
+    desc: Run the dashboard in live-refresh mode against the smoke vault
+    dir: '{{.SMOKE_DIR}}'
+    cmds:
+      - bun scripts/dashboard.ts --watch
+
+  clean:
+    desc: Remove the smoke vault
+    cmds:
+      - rm -rf {{.SMOKE_DIR}}
