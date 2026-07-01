@@ -2,8 +2,8 @@
 // Headless agent-status dashboard (Q2). Mirrors the Dataview buckets, no Obsidian needed.
 //   dashboard.ts            print to stdout
 //   dashboard.ts --write    also write dashboard/status.txt
-import { readFileSync, writeFileSync } from "node:fs";
-import { resolve, join, relative } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { resolve, join, relative, dirname } from "node:path";
 import { parseFrontmatter, extractField, splitLines } from "./frontmatter.ts";
 import { findAgentLogs } from "./validate-logs.ts";
 
@@ -94,6 +94,7 @@ function main() {
   process.stdout.write(text);
   if (process.argv.includes("--write")) {
     const dest = join(vaultRoot, "dashboard", "status.txt");
+    mkdirSync(dirname(dest), { recursive: true });
     writeFileSync(dest, text, "utf8");
     console.log(`\n(written → ${relative(vaultRoot, dest)})`);
   }

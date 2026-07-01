@@ -21,7 +21,11 @@ const titleCase = (s: string) =>
 
 export function resolvePath(d: Derived, vaultRoot: string, noteType: string, noteName: string, today: Date): string {
   if (noteType in d.EPISODIC_DIRS) return join(vaultRoot, d.EPISODIC_DIRS[noteType], `${ym(today)}.md`);
-  if (noteType in d.SEMANTIC_DIRS) return join(vaultRoot, d.SEMANTIC_DIRS[noteType], `${noteName}.md`);
+  if (noteType in d.SEMANTIC_DIRS) {
+    if (!noteName || /[\/\\]/.test(noteName) || noteName === "." || noteName === "..")
+      throw new Error(`invalid --note '${noteName}': must be a plain filename with no path separators`);
+    return join(vaultRoot, d.SEMANTIC_DIRS[noteType], `${noteName}.md`);
+  }
   throw new Error(`unsupported type '${noteType}' (choices: ${Object.keys(d.TYPE_DIRS).join(", ")})`);
 }
 

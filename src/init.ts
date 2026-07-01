@@ -2,8 +2,8 @@
 // vault-init — scaffold an agent-coordination + memory vault. Published bunx bin.
 // Interactive:     bunx vault-init
 // Non-interactive: bunx vault-init --yes --preset sre --name work --dir ./work-vault
-import { mkdirSync, writeFileSync, copyFileSync, existsSync, chmodSync, readFileSync } from "node:fs";
-import { resolve, join, dirname } from "node:path";
+import { mkdirSync, writeFileSync, copyFileSync, existsSync, chmodSync, readFileSync, readdirSync } from "node:fs";
+import { resolve, join, dirname, sep } from "node:path";
 
 const SRC = import.meta.dir; // package/src — holds the operational .ts to vendor
 const PKG = resolve(SRC, ".."); // package root — holds templates/
@@ -18,7 +18,17 @@ interface Item { value: string; dir: string; bucket: "semantic" | "episodic" | "
 interface Preset { items: Item[]; }
 
 function loadPreset(name: string): Preset {
+  if (!name || /[\/\\]/.test(name) || name === "." || name === "..")
+    throw new Error(`invalid --preset '${name}': must be a plain preset name, no path separators`);
   return JSON.parse(readFileSync(join(TEMPLATES, "presets", `${name}.json`), "utf8"));
+}
+
+/** join() that refuses to resolve outside `base` — blocks `..`-style traversal in user-supplied dir names. */
+function safeJoin(base: string, rel: string): string {
+  const full = resolve(base, rel);
+  if (full !== base && !full.startsWith(base + sep))
+    throw new Error(`unsafe path '${rel}' escapes target directory`);
+  return full;
 }
 
 function buildConfig(name: string, items: Item[]) {
@@ -39,6 +49,7 @@ function parseFlags(argv: string[]) {
     const a = argv[i];
     if (a === "--yes" || a === "-y") f.yes = true;
     else if (a === "--no-examples") f.noExamples = true;
+    else if (a === "--force") f.force = true;
     else if (a.startsWith("--")) f[a.slice(2)] = argv[++i];
   }
   return f;
@@ -77,16 +88,24 @@ async function interactive() {
   const dir = await p.text({ message: "Target directory", defaultValue: `./${name}` });
   if (p.isCancel(dir)) { p.cancel("cancelled"); process.exit(1); }
 
-  scaffold(resolve(dir as string), buildConfig(name as string, chosen), true);
+  try {
+    scaffold(resolve(dir as string), buildConfig(name as string, chosen), true);
+  } catch (e: any) {
+    p.cancel(e.message);
+    process.exit(1);
+  }
   p.outro(`Done. cd ${dir} and read SEED-PROMPT.md to populate it with an AI.`);
 }
 
-function scaffold(target: string, config: ReturnType<typeof buildConfig>, examples: boolean) {
+function scaffold(target: string, config: ReturnType<typeof buildConfig>, examples: boolean, force = false) {
+  if (existsSync(target) && readdirSync(target).length > 0 && !force)
+    throw new Error(`target directory '${target}' already exists and is not empty — pass --force to overwrite`);
+
   const allDirs = [
     "agents", "dashboard", "handoffs", "scripts", ".githooks", ".forgejo/workflows", "docs/agents",
     ...Object.values(config.semantic_dirs), ...Object.values(config.episodic_dirs), ...config.extra_dirs,
   ];
-  for (const d of allDirs) mkdirSync(join(target, d), { recursive: true });
+  for (const d of allDirs) mkdirSync(safeJoin(target, d), { recursive: true });
 
   writeFileSync(join(target, "vault.config.json"), JSON.stringify(config, null, 2) + "\n");
 
@@ -113,6 +132,12 @@ function scaffold(target: string, config: ReturnType<typeof buildConfig>, exampl
   writeFileSync(join(target, ".gitignore"), "handoffs/\ndashboard/status.txt\n");
 
   if (examples) writeExamples(target, config);
+
+  // git doesn't track empty dirs — keep any scaffolded dir that ended up empty
+  for (const d of allDirs) {
+    const full = safeJoin(target, d);
+    if (existsSync(full) && readdirSync(full).length === 0) writeFileSync(join(full, ".gitkeep"), "");
+  }
 
   // git init + hooks path
   if (!existsSync(join(target, ".git"))) {
@@ -148,7 +173,12 @@ async function main() {
   const preset = (f.preset as string) ?? "blank";
   const target = resolve((f.dir as string) ?? `./${name}`);
   const items = loadPreset(preset).items.filter((it) => it.selected);
-  scaffold(target, buildConfig(name, items), !f.noExamples);
+  try {
+    scaffold(target, buildConfig(name, items), !f.noExamples, Boolean(f.force));
+  } catch (e: any) {
+    console.error(`error: ${e.message}`);
+    process.exit(1);
+  }
   console.log(`✓ scaffolded ${preset} vault → ${target}`);
   console.log(`  next: cd ${target} && bun run dashboard`);
 }

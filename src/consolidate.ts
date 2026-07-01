@@ -19,6 +19,12 @@ function dateOrNull(val: string | null): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+/** Local calendar date (Y-M-D of `now`) recast as a UTC-midnight Date, so it's
+ * comparable to dateOrNull()'s output without local-instant-vs-UTC-midnight drift. */
+function todayCalendarDate(now: Date): Date {
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
+
 function readFm(path: string): { fm: string[]; body: string[] } | null {
   try {
     const parsed = parseFrontmatter(splitLines(readFileSync(path, "utf8")));
@@ -56,7 +62,7 @@ function wikiLinksFromRelated(body: string[]): string[] {
 }
 
 export function findArchivalCandidates(d: Derived, vaultRoot: string, today: Date): [string, string][] {
-  const threshold = new Date(today.getTime() - ARCHIVE_THRESHOLD_DAYS * 86400_000);
+  const threshold = new Date(todayCalendarDate(today).getTime() - ARCHIVE_THRESHOLD_DAYS * 86400_000);
   const out: [string, string][] = [];
   for (const path of findAgentLogs(vaultRoot)) {
     const f = readFm(path);
