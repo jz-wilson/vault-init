@@ -6,8 +6,8 @@ All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@
 
 ## Commands
 
-- `bun test` — 13 `bun:test` cases (ported from Python `--self-check` asserts)
-- `bun src/init.ts --yes --dir <path> --preset sre|homelab|blank [--force] [--no-examples]` — scaffold
+- `bun test` — 58 `bun:test` cases across 6 files (originals ported from Python `--self-check` asserts)
+- `bun src/init.ts --yes --dir <path> --preset sre|homelab|okf|blank [--force] [--no-examples]` — scaffold
 - `bunx vault-init` — interactive scaffold (clack prompts)
 
 ## Architecture
@@ -17,6 +17,10 @@ All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@
 - `src/config.ts` — config-driven dir layout (`vault.config.json`: semantic_dirs + episodic_dirs +
   extra_dirs); `type:` enum is **derived**, not hardcoded.
 - `src/dashboard.ts`, `src/init.ts` — new, no Python original.
+- `src/index.ts`, `snapshot.ts`, `search.ts`, `nightly.ts`, `log-turn.ts` — agentic-OS layer (issue #1):
+  per-folder index.md, token-capped identity digest, BM25 lexical search (injectable `ScoreFn` seam),
+  wiki/raw worklist + auditable processing, journal per-turn append. All pure-function-over-a-tree,
+  zero network/LLM — LLM-driven steps are the invoking agent's job (see templates/hooks/).
 - `OPERATIONAL` scripts (init.ts) are **vendored** into every scaffolded vault's `scripts/` —
   self-contained, no network dep at commit time. Keep that list in sync with new src files meant to ship.
 
@@ -30,10 +34,11 @@ All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@
 
 - **Any user-supplied path fragment needs a traversal guard.** `--note`, `--dir`, `--preset`, and
   `extra_dirs` (from `vault.config.json` or the interactive custom-dirs prompt) all get concatenated
-  via `path.join`, which does **not** block `..`. Pattern already applied: `resolvePath()` in
-  capture.ts rejects `/`, `\`, `.`, `..` in `--note`; `safeJoin()` in init.ts resolves+checks
-  `startsWith(base)` before any mkdir/write. Apply the same guard to any new CLI flag or config field
-  that reaches a filesystem path.
+  via `path.join`, which does **not** block `..`. Canonical guard: `resolveInside()` in config.ts
+  (resolve + `startsWith(base)`), used by index/snapshot/config loading; `resolvePath()` in capture.ts
+  and `assertPlainFilename()` in nightly.ts reject `/`, `\`, `.`, `..` outright; `safeJoin()` in
+  init.ts guards scaffold targets. Apply one of these to any new CLI flag or config field that
+  reaches a filesystem path.
 - **Date comparisons must be pure calendar-date, not epoch-ms.** `consolidate.ts`'s `dateOrNull()`
   parses `YYYY-MM-DD` as UTC midnight; `todayCalendarDate()` recasts the local Y-M-D the same way
   before comparing. Mixing a UTC-midnight date with a raw `new Date()` instant reintroduces
