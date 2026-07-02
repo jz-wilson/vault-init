@@ -14,6 +14,17 @@ follow one schema so the operator can monitor everything from one dashboard.
 3. File naming: `YYYY-MM-DD-short-task-description.md`.
 4. **Serialize writes** — one agent writes per working tree at a time. Per-agent dirs
    prevent content conflicts, but git itself is not namespaced.
+5. **Journal grounding** — before responding to a `journal/` entry, first read `crm/` (people
+   mentioned) and any relevant `wiki/processed/` concept notes. A journal response written
+   without that context is not vault-grounded and should not be trusted.
+6. **Tool inventory** — "what's connected to this vault" (MCP servers, external tools, APIs) is
+   documented as `type: reference` notes, not scattered across agent logs. Check there first.
+
+### Agent role charters (optional)
+
+An agent may keep `agents/<name>/AGENT.md` — a role charter describing its scope, standing
+instructions, and boundaries, distinct from its dated `reports/`. Not required, but when present
+it is the first thing another agent (or the operator) should read before delegating to `<name>`.
 
 ### Required frontmatter
 

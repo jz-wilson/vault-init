@@ -1,0 +1,44 @@
+# Nightly raw-clipping worklist runner. Mirrors validate.yml's structure but runs on a
+# schedule instead of push/pull_request. nightly.ts itself only computes the deterministic
+# worklist (wiki/raw/ files with no wiki/processed/ mirror) and performs the auditable
+# git-mv + log.md append + commit — it never calls an LLM. This workflow's only extra job
+# is handing that worklist to an agent, which does the actual theme extraction / folding
+# into concept notes / interlinking via capture.ts + judgment, then calls
+# `bun scripts/nightly.ts process <file> --log "<entry>" --apply` per file it finishes.
+# See templates/hooks/nightly-automation.md for the systemd/cron equivalents and the full
+# division-of-labor writeup.
+name: nightly
+on:
+  schedule:
+    - cron: "0 9 * * *" # 09:00 UTC daily — adjust to taste
+  workflow_dispatch: {} # allow manual runs from the Actions/Forgejo UI
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Compute worklist
+        id: worklist
+        run: bun scripts/nightly.ts list
+
+      # Replace this step with your agent runner of choice (Claude Code action, a custom
+      # invocation script, etc). It should read scripts/nightly.ts's `list` output, process
+      # each file (theme extraction, folding facts into concept notes via capture.ts,
+      # interlinking), then run:
+      #   bun scripts/nightly.ts process <file> --log "<one-line summary>" --apply
+      # per file it finishes. Never pass --push here unless you've deliberately decided this
+      # job should push on its own — nightly.ts defaults to local-commit-only.
+      - name: Process worklist with an agent
+        run: |
+          echo "TODO: invoke your agent here, pointed at the worklist above."
+          echo "vault-init is tool-agnostic — wire in whatever agent runner you use."
+
+      # No push step by default — this mirrors nightly.ts's own opt-in push gate
+      # (commits stay local until someone deliberately passes --push). If you want this
+      # job to publish its commits, uncomment below and understand you're opting in:
+      # - name: Push processed commits
+      #   if: success()
+      #   run: git push

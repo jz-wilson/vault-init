@@ -12,9 +12,14 @@ note schema, the directory layout, and the agent protocol. Then:
 1. **Replace the examples.** Delete the `example.md` semantic note and the
    `agents/example-agent/` demo log once you understand the schema they demonstrate.
 
-2. **Write the identity layer.** Create `IDENTITY.md` (who operates this vault, working
-   style, priorities) and `STACK.md` (the tools/systems this vault tracks) at the root.
-   These are the portable procedural tier — keep them dense and current.
+2. **Fill in the identity layer.** Three files exist at root:
+   - `IDENTITY.md` — who operates this vault, working style, priorities, current focus
+   - `ALWAYS.md` — hard rules an agent must always follow
+   - `NEVER.md` — hard prohibitions an agent must never violate
+   
+   These are the portable procedural tier — keep them dense and current. Load them at
+   session start to ground agent behavior. Also create `STACK.md` (the tools/systems
+   this vault tracks).
 
 3. **Seed each semantic directory** with one real note in the correct schema. For an SRE
    vault: a real runbook, a real service note. Use `bun scripts/capture.ts --type <type>

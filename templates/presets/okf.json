@@ -1,0 +1,10 @@
+{
+  "items": [
+    { "value": "project", "dir": "projects", "bucket": "semantic", "label": "projects/ (ongoing work)", "selected": true },
+    { "value": "person", "dir": "crm", "bucket": "semantic", "label": "crm/ (people you know)", "selected": true },
+    { "value": "skill", "dir": "skills", "bucket": "semantic", "label": "skills/ (repeatable workflows)", "selected": true },
+    { "value": "journal", "dir": "journal", "bucket": "episodic", "label": "journal/ (monthly dated-bullet log)", "selected": true },
+    { "value": "wiki-raw", "dir": "wiki/raw", "bucket": "extra", "label": "wiki/raw/ (schema-exempt clippings)", "selected": true },
+    { "value": "wiki-processed", "dir": "wiki/processed", "bucket": "extra", "label": "wiki/processed/ (deduped concept notes)", "selected": true }
+  ]
+}

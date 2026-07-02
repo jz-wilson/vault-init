@@ -6,6 +6,11 @@
     { "value": "incident", "dir": "incidents", "bucket": "episodic", "label": "incidents/ (monthly incident log)", "selected": true },
     { "value": "decision", "dir": "decisions", "bucket": "episodic", "label": "decisions/ (monthly decision log)", "selected": true },
     { "value": "postmortem", "dir": "postmortems", "bucket": "extra", "label": "postmortems/ (freeform writeups)", "selected": true },
-    { "value": "oncall", "dir": "oncall", "bucket": "extra", "label": "oncall/ (handoff notes)", "selected": false }
+    { "value": "oncall", "dir": "oncall", "bucket": "extra", "label": "oncall/ (handoff notes)", "selected": false },
+    { "value": "person", "dir": "crm", "bucket": "semantic", "label": "crm/ (people you know)", "selected": false },
+    { "value": "skill", "dir": "skills", "bucket": "semantic", "label": "skills/ (repeatable workflows)", "selected": false },
+    { "value": "journal", "dir": "journal", "bucket": "episodic", "label": "journal/ (monthly dated-bullet log)", "selected": false },
+    { "value": "wiki-raw", "dir": "wiki/raw", "bucket": "extra", "label": "wiki/raw/ (schema-exempt clippings)", "selected": false },
+    { "value": "wiki-processed", "dir": "wiki/processed", "bucket": "extra", "label": "wiki/processed/ (deduped concept notes)", "selected": false }
   ]
 }

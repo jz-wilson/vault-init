@@ -10,3 +10,18 @@ fi
 
 cd "$(git rev-parse --show-toplevel)"
 bun scripts/validate-logs.ts
+
+# Regenerate per-folder index.md for any dir touched by this commit's staged .md files, then
+# stage the result. scripts/index.ts itself no-ops on dirs that aren't configured vault dirs,
+# so it's safe to just pass whatever dirs came up.
+if [ -f scripts/index.ts ]; then
+  mapfile -t staged_md_dirs < <(git diff --cached --name-only --diff-filter=ACM -- '*.md' | xargs -r -n1 dirname | sort -u)
+  if [ "${#staged_md_dirs[@]}" -gt 0 ]; then
+    bun scripts/index.ts "${staged_md_dirs[@]}"
+    # add per-dir: a batched pathspec is all-or-nothing, and unconfigured dirs
+    # (root docs, agents/) never get an index.md — one miss must not unstage the rest
+    for d in "${staged_md_dirs[@]}"; do
+      if [ -f "$d/index.md" ]; then git add -- "$d/index.md"; fi
+    done
+  fi
+fi

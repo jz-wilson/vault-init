@@ -11,7 +11,7 @@ import {
 import { loadFromScript } from "./config.ts";
 import { validateAgentLog } from "./validate-logs.ts";
 
-const ROOT_SKIP_FILES = new Set(["CLAUDE.md", "AGENTS.md", "README.md", "RTK.md", "_format.md", "IDENTITY.md", "STACK.md", "SEED-PROMPT.md"]);
+const ROOT_SKIP_FILES = new Set(["CLAUDE.md", "AGENTS.md", "README.md", "RTK.md", "_format.md", "IDENTITY.md", "STACK.md", "SEED-PROMPT.md", "log.md", "ALWAYS.md", "NEVER.md", "SOUL.md"]);
 const SKIP_SUBTREES = new Set(["scripts", "dashboard", ".git", ".claude", ".omc", "agents", "handoffs", ".obsidian"]);
 
 const sortedTypes = (s: Set<string>) => "[" + [...s].sort().map((t) => `'${t}'`).join(", ") + "]";
@@ -54,6 +54,19 @@ export function validateVaultNote(path: string, vaultRoot: string, validTypes: S
   else if (!validTypes.has(typeVal))
     errors.push([fmLineNo(fm, "type", fmStart), `'type' must be one of ${sortedTypes(validTypes)}, got: '${typeVal}'`]);
 
+  // person notes layer met:/last_contact: on top of the common shape, mirroring how
+  // validate-logs.ts layers agent-log-specific fields (same error message style).
+  if (typeVal === "person") {
+    for (const field of ["met", "last_contact"]) {
+      const val = extractField(fm, field);
+      if (val === null) errors.push([fmStart, `missing required frontmatter field: '${field}'`]);
+      else if (!DATE_RE.test(val))
+        errors.push([fmLineNo(fm, field, fmStart), `'${field}' must match YYYY-MM-DD, got: '${val}'`]);
+      else if (!isValidCalendarDate(val))
+        errors.push([fmLineNo(fm, field, fmStart), `'${field}' is not a real calendar date: '${val}'`]);
+    }
+  }
+
   const bodyStart = closeLineNo + 1;
   if (!body.some((bl) => /^# \S/.test(bl)))
     errors.push([bodyStart, "body missing H1 heading (a line starting with '# ')"]);
@@ -66,10 +79,16 @@ export function validateVaultNote(path: string, vaultRoot: string, validTypes: S
   return [rel, errors];
 }
 
-function shouldSkip(rel: string): boolean {
+export function shouldSkip(rel: string): boolean {
   const parts = rel.split("/");
   if (parts.length === 1 && ROOT_SKIP_FILES.has(parts[0])) return true;
   if (parts.length && SKIP_SUBTREES.has(parts[0])) return true;
+  // clippings are schema-exempt in full-scan mode (explicit-args bypass still checks them):
+  // wiki/raw/ holds unedited drops, wiki/processed/ the same files after nightly.ts's move —
+  // neither is ever hand-formatted; the schema applies to the concept notes they fold into.
+  if (parts.length >= 2 && parts[0] === "wiki" && (parts[1] === "raw" || parts[1] === "processed")) return true;
+  // generated index files carry no frontmatter.
+  if (basename(rel) === "index.md") return true;
   return false;
 }
 

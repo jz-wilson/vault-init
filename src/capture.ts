@@ -10,10 +10,10 @@ import { parseFrontmatter, fmLineNo, splitLines } from "./frontmatter.ts";
 import { loadFromScript, type Derived } from "./config.ts";
 import { validateVaultNote } from "./validate-vault.ts";
 
-function ymd(d: Date) {
+export function ymd(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-function ym(d: Date) {
+export function ym(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 const titleCase = (s: string) =>

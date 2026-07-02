@@ -13,6 +13,7 @@ const TEMPLATES = join(PKG, "templates");
 const OPERATIONAL = [
   "frontmatter.ts", "config.ts", "validate-logs.ts", "validate-vault.ts",
   "capture.ts", "consolidate.ts", "dashboard.ts",
+  "index.ts", "snapshot.ts", "search.ts", "nightly.ts", "log-turn.ts",
 ];
 
 interface Item { value: string; dir: string; bucket: "semantic" | "episodic" | "extra"; label: string; selected: boolean; }
@@ -66,6 +67,7 @@ async function interactive() {
     options: [
       { value: "sre", label: "SRE / work", hint: "runbooks, incidents, postmortems, services, oncall" },
       { value: "homelab", label: "Homelab", hint: "infrastructure, decisions, projects, personal" },
+      { value: "okf", label: "Agentic second brain", hint: "wiki, crm, journal, skills — agentic second brain" },
       { value: "blank", label: "Blank", hint: "projects only" },
     ],
   });
@@ -135,6 +137,11 @@ function scaffold(target: string, config: ReturnType<typeof buildConfig>, exampl
       capture: "bun scripts/capture.ts",
       consolidate: "bun scripts/consolidate.ts",
       dashboard: "bun scripts/dashboard.ts",
+      index: "bun scripts/index.ts",
+      snapshot: "bun scripts/snapshot.ts",
+      search: "bun scripts/search.ts",
+      nightly: "bun scripts/nightly.ts",
+      "log-turn": "bun scripts/log-turn.ts",
     },
   }, null, 2) + "\n");
 
@@ -142,7 +149,11 @@ function scaffold(target: string, config: ReturnType<typeof buildConfig>, exampl
   copyTpl(join(TEMPLATES, "githooks", "pre-commit"), join(target, ".githooks", "pre-commit"));
   chmodSync(join(target, ".githooks", "pre-commit"), 0o755);
   copyTpl(join(TEMPLATES, "ci", "validate.yml"), join(target, ".forgejo", "workflows", "validate.yml"));
-  for (const doc of ["_format.md", "AGENTS.md", "README.md"]) copyTpl(join(TEMPLATES, "docs", doc), join(target, doc));
+  copyTpl(join(TEMPLATES, "ci", "nightly.yml"), join(target, ".forgejo", "workflows", "nightly.yml"));
+  // hook-wiring docs ship next to the scripts they wire; scripts/ is validator-skipped
+  for (const h of ["session-start-snapshot.md", "log-turn-hook.md", "nightly-automation.md"])
+    copyTpl(join(TEMPLATES, "hooks", h), join(target, "scripts", "hooks", h));
+  for (const doc of ["_format.md", "AGENTS.md", "README.md", "IDENTITY.md", "ALWAYS.md", "NEVER.md"]) copyTpl(join(TEMPLATES, "docs", doc), join(target, doc));
   copyTpl(join(TEMPLATES, "SEED-PROMPT.md"), join(target, "SEED-PROMPT.md"));
   writeFileSync(join(target, ".gitignore"), "handoffs/\ndashboard/status.txt\n");
 
