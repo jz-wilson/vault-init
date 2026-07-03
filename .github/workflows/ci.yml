@@ -1,0 +1,13 @@
+# Test gate: runs the bun suite (66+ cases, incl. the frontmatter/validate-vault/validate-logs
+# ports) on every push + PR. The validators ARE the tests here — this repo is the tooling, not a vault.
+name: ci
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun test
