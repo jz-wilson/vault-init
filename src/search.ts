@@ -147,7 +147,7 @@ export function search(notes: NoteInput[], query: string, scoreFn: ScoreFn = bm2
   return results;
 }
 
-function loadNotesFromVault(vaultRoot: string): NoteInput[] {
+export function loadNotesFromVault(vaultRoot: string): NoteInput[] {
   const paths = [...new Bun.Glob("**/*.md").scanSync(vaultRoot)].map((p) => resolve(vaultRoot, p)).sort();
   const notes: NoteInput[] = [];
   for (const path of paths) {

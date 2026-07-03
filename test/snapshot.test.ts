@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildSnapshot } from "../src/snapshot.ts";
+import { buildSnapshot, loadSnapshotFiles, DEFAULT_SNAPSHOT } from "../src/snapshot.ts";
 
 const approxTokens = (s: string) => Math.ceil(s.length / 4);
 
@@ -137,4 +137,23 @@ test("CLI: --budget flag overrides configured budget_tokens", () => {
   const overridden = runSnapshot(dir, ["--budget", "10000"]);
   expect(usingConfig.out.trim()).toBe("");
   expect(overridden.out).toContain("n".repeat(400));
+});
+
+// ---- loadSnapshotFiles: loader parity ----
+
+test("loadSnapshotFiles: returns both present files, skips missing ones", () => {
+  const vaultRoot = mkdtempSync(join(tmpdir(), "loader-"));
+  const cfg = { files: ["ALWAYS.md", "NEVER.md", "MISSING.md"], budget_tokens: 1000 };
+
+  writeFileSync(join(vaultRoot, "ALWAYS.md"), "## Always\nContent A");
+  writeFileSync(join(vaultRoot, "NEVER.md"), "## Never\nContent B");
+  // MISSING.md is not created
+
+  const files = loadSnapshotFiles(vaultRoot, cfg);
+
+  expect(files).toHaveLength(2);
+  expect(files[0].path).toBe("ALWAYS.md");
+  expect(files[0].content).toBe("## Always\nContent A");
+  expect(files[1].path).toBe("NEVER.md");
+  expect(files[1].content).toBe("## Never\nContent B");
 });

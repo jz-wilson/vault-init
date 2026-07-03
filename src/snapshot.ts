@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { loadFromScript, resolveInside, type SnapshotConfig } from "./config.ts";
 
-const DEFAULT_SNAPSHOT: SnapshotConfig = {
+export const DEFAULT_SNAPSHOT: SnapshotConfig = {
   files: ["IDENTITY.md", "ALWAYS.md", "NEVER.md", "AGENTS.md"],
   budget_tokens: 1300,
 };
@@ -86,6 +86,16 @@ export function buildSnapshot(files: { path: string; content: string }[], budget
   return output.join("\n\n");
 }
 
+export function loadSnapshotFiles(vaultRoot: string, cfg: SnapshotConfig): { path: string; content: string }[] {
+  const files: { path: string; content: string }[] = [];
+  for (const rel of cfg.files) {
+    const full = resolveInside(vaultRoot, rel, "snapshot: path");
+    if (!existsSync(full)) continue;
+    files.push({ path: rel, content: readFileSync(full, "utf8") });
+  }
+  return files;
+}
+
 /** join+resolve that refuses to escape vaultRoot — same guard pattern as safeJoin() in init.ts. */
 function parseBudgetFlag(argv: string[]): number | undefined {
   const i = argv.indexOf("--budget");
@@ -105,17 +115,12 @@ function main() {
   const budgetOverride = parseBudgetFlag(argv);
   const budgetTokens = budgetOverride ?? snapshotCfg.budget_tokens;
 
-  const files: { path: string; content: string }[] = [];
-  for (const rel of snapshotCfg.files) {
-    let full: string;
-    try {
-      full = resolveInside(vaultRoot, rel, "snapshot: path");
-    } catch (e: any) {
-      console.error(`snapshot: ${e.message}`);
-      process.exit(1);
-    }
-    if (!existsSync(full)) continue; // missing files skipped silently
-    files.push({ path: rel, content: readFileSync(full, "utf8") });
+  let files: { path: string; content: string }[] = [];
+  try {
+    files = loadSnapshotFiles(vaultRoot, snapshotCfg);
+  } catch (e: any) {
+    console.error(`snapshot: ${e.message}`);
+    process.exit(1);
   }
 
   const snapshot = buildSnapshot(files, budgetTokens);
