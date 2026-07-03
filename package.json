@@ -1,6 +1,6 @@
 {
   "name": "vault-init",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Scaffold an agent-coordination + memory vault (homelab or SRE presets)",
   "type": "module",
   "bin": {
