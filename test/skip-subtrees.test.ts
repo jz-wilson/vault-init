@@ -46,3 +46,23 @@ test("shouldSkip: node_modules, .claude, agents, handoffs skipped; real note not
   expect(shouldSkip("handoffs/w.md")).toBe(true);
   expect(shouldSkip("projects/real.md")).toBe(false);
 });
+
+// ---- issue #9: skip names NESTED below the vault root (a repo cloned into a content dir) ----
+
+test("shouldSkip: nested node_modules/.git skipped; sibling real note not", () => {
+  expect(shouldSkip("projects/x/node_modules/y.md")).toBe(true);
+  expect(shouldSkip("projects/x/.git/COMMIT.md")).toBe(true);
+  expect(shouldSkip("projects/x/notes.md")).toBe(false);
+});
+
+test("loadNotesFromVault excludes nested node_modules — keeps sibling note", () => {
+  const dir = mkdtempSync(join(tmpdir(), "skip-nested-"));
+  writeFileSync(join(dir, "vault.config.json"), JSON.stringify({ name: "t", semantic_dirs: {}, episodic_dirs: {}, extra_dirs: [] }));
+
+  mkdirSync(join(dir, "projects", "x", "node_modules"), { recursive: true });
+  writeFileSync(join(dir, "projects", "x", "node_modules", "dep.md"), "# vendored\n");
+  writeFileSync(join(dir, "projects", "x", "notes.md"), "# Real note\n");
+
+  const paths = loadNotesFromVault(dir).map((n) => n.path).sort();
+  expect(paths).toEqual(["projects/x/notes.md"]);
+});
