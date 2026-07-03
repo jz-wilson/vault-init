@@ -9,7 +9,7 @@ import {
   checkBodyPaths, splitLines, validateCommonNoteShape, parseFrontmatter,
   FENCE_RE, INLINE_CODE_RE, type LineError,
 } from "./frontmatter.ts";
-import { loadFromScript, NONCONTENT_SUBTREES } from "./config.ts";
+import { loadFromScript, NONCONTENT_SUBTREES, inSkippedSubtree } from "./config.ts";
 import { validateAgentLog } from "./validate-logs.ts";
 
 const ROOT_SKIP_FILES = new Set(["CLAUDE.md", "AGENTS.md", "README.md", "RTK.md", "_format.md", "IDENTITY.md", "STACK.md", "SEED-PROMPT.md", "log.md", "ALWAYS.md", "NEVER.md", "SOUL.md"]);
@@ -84,7 +84,7 @@ export function validateVaultNote(path: string, vaultRoot: string, validTypes: S
 export function shouldSkip(rel: string): boolean {
   const parts = rel.split("/");
   if (parts.length === 1 && ROOT_SKIP_FILES.has(parts[0])) return true;
-  if (parts.length && SKIP_SUBTREES.has(parts[0])) return true;
+  if (inSkippedSubtree(rel, SKIP_SUBTREES)) return true;
   // clippings are schema-exempt in full-scan mode (explicit-args bypass still checks them):
   // wiki/raw/ holds unedited drops, wiki/processed/ the same files after nightly.ts's move —
   // neither is ever hand-formatted; the schema applies to the concept notes they fold into.

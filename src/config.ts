@@ -35,6 +35,12 @@ export interface Derived {
  *  Tools layer their own intentional extras on top — see search.ts / validate-vault.ts. */
 export const NONCONTENT_SUBTREES = new Set([".git", "node_modules", ".obsidian", ".claude", ".omc", "scripts", "dashboard"]);
 
+/** True if a skip name appears in ANY segment of rel, not just the first — so a repo cloned
+ *  into a content dir (projects/x/node_modules/y.md) is skipped like a root-level one. */
+export function inSkippedSubtree(rel: string, skip: Set<string>): boolean {
+  return rel.split("/").some((seg) => skip.has(seg));
+}
+
 /** resolve() that refuses to escape base — the canonical traversal guard for anything
  *  user-supplied that becomes a path (config dirs, CLI dir args, snapshot file lists). */
 export function resolveInside(base: string, rel: string, label = "path"): string {

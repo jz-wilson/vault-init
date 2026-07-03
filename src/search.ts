@@ -7,7 +7,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseFrontmatter, splitLines } from "./frontmatter.ts";
-import { NONCONTENT_SUBTREES } from "./config.ts";
+import { NONCONTENT_SUBTREES, inSkippedSubtree } from "./config.ts";
 
 // NONCONTENT_SUBTREES (shared) newly closes a search-side gap: .claude/.omc tool state is no
 // longer indexed (previously only validate skipped those). On top, skip agents/ + handoffs/ —
@@ -156,8 +156,7 @@ export function loadNotesFromVault(vaultRoot: string): NoteInput[] {
   const notes: NoteInput[] = [];
   for (const path of paths) {
     const rel = relative(vaultRoot, path);
-    const top = rel.split("/")[0];
-    if (SKIP_SUBTREES.has(top)) continue;
+    if (inSkippedSubtree(rel, SKIP_SUBTREES)) continue;
     if (!existsSync(path)) continue;
     notes.push({ path: rel, text: readFileSync(path, "utf8") });
   }
