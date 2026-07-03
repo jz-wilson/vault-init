@@ -9,11 +9,12 @@ import {
   checkBodyPaths, splitLines, validateCommonNoteShape, parseFrontmatter,
   FENCE_RE, INLINE_CODE_RE, type LineError,
 } from "./frontmatter.ts";
-import { loadFromScript } from "./config.ts";
+import { loadFromScript, NONCONTENT_SUBTREES } from "./config.ts";
 import { validateAgentLog } from "./validate-logs.ts";
 
 const ROOT_SKIP_FILES = new Set(["CLAUDE.md", "AGENTS.md", "README.md", "RTK.md", "_format.md", "IDENTITY.md", "STACK.md", "SEED-PROMPT.md", "log.md", "ALWAYS.md", "NEVER.md", "SOUL.md"]);
-const SKIP_SUBTREES = new Set(["scripts", "dashboard", ".git", ".claude", ".omc", "agents", "handoffs", ".obsidian"]);
+// agents/ + handoffs/ are validated by their own path (validate-logs.ts / isAgentLog dispatch), not here.
+const SKIP_SUBTREES = new Set([...NONCONTENT_SUBTREES, "agents", "handoffs"]);
 
 const sortedTypes = (s: Set<string>) => "[" + [...s].sort().map((t) => `'${t}'`).join(", ") + "]";
 
