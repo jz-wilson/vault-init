@@ -6,8 +6,9 @@ export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const FILE_URL_RE = /file:\/\//;
 const MNT_PATH_RE = /(?:^|[\s"'(])(\/mnt\/)/;
 const WIN_PATH_RE = /(?:^|[\s"'(])([Cc][:/\\])/;
-const INLINE_CODE_RE = /`[^`]*`/g;
-const FENCE_RE = /^(`{3,}|~{3,})/;
+export const INLINE_CODE_RE = /`[^`]*`/g;
+// CommonMark allows a fence indented up to 3 spaces (4+ is a code block, not a fence).
+export const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/;
 
 export interface ParsedFm {
   fm: string[]; // frontmatter lines (between the --- delimiters)

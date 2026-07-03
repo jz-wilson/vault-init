@@ -6,7 +6,7 @@ All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@
 
 ## Commands
 
-- `bun test` — 58 `bun:test` cases across 6 files (originals ported from Python `--self-check` asserts)
+- `bun test` — 66 `bun:test` cases across 7 files (originals ported from Python `--self-check` asserts)
 - `bun src/init.ts --yes --dir <path> --preset sre|homelab|okf|blank [--force] [--no-examples]` — scaffold
 - `bunx vault-init` — interactive scaffold (clack prompts)
 
