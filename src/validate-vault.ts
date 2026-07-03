@@ -6,7 +6,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { relative, resolve, basename } from "node:path";
 import {
   DATE_RE, extractField, fmLineNo, extractTagsList, isValidCalendarDate,
-  checkBodyPaths, splitLines, validateCommonNoteShape, parseFrontmatter, type LineError,
+  checkBodyPaths, splitLines, validateCommonNoteShape, parseFrontmatter,
+  FENCE_RE, INLINE_CODE_RE, type LineError,
 } from "./frontmatter.ts";
 import { loadFromScript } from "./config.ts";
 import { validateAgentLog } from "./validate-logs.ts";
@@ -92,6 +93,63 @@ export function shouldSkip(rel: string): boolean {
   return false;
 }
 
+// Cross-file broken-link detection (stolen from P.O.W.E.R's lint_brain.py, kept pure/offline).
+// Whole-vault pass: per-file validateVaultNote can't see whether [[X]] resolves.
+// ponytail: dropped orphan-detection — warn-only, fired on every fresh note = ignored noise.
+const WIKI_LINK_RE = /\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g; // mirrors consolidate.ts
+const MD_LINK_RE = /\]\(([^)]+?)\)/g;
+const stripMd = (rel: string) => rel.replace(/\\/g, "/").replace(/\.md$/, "");
+
+export interface LinkReport {
+  broken: [string, number, string][]; // [rel, line, msg] — hard errors
+}
+
+/** Broken-link detection over the whole vault. Obsidian-style resolution: a bare [[foo]]
+ *  resolves if any note basename `foo.md` exists anywhere; a path-qualified [[dir/foo]]
+ *  must match that exact relative path. Resolution is case-insensitive (Obsidian default).
+ *  Existence set spans ALL notes (incl. skip-files like README that are valid link targets);
+ *  only non-skipped notes are linted as sources. */
+export function checkLinks(vaultRoot: string): LinkReport {
+  const allMd = [...new Bun.Glob("**/*.md").scanSync(vaultRoot)];
+  const existStems = new Set(allMd.map((rel) => basename(rel).replace(/\.md$/, "").toLowerCase()));
+  const existPaths = new Set(allMd.map((rel) => stripMd(rel).toLowerCase()));
+  const broken: [string, number, string][] = [];
+
+  for (const rel of allMd) {
+    if (shouldSkip(rel)) continue; // only non-skipped notes are linted as sources
+    let text: string;
+    try { text = readFileSync(resolve(vaultRoot, rel), "utf8"); }
+    catch { continue; } // dangling symlink / EACCES / delete-race — skip, don't crash the gate
+    // Parse frontmatter off so YAML fields (related:, description:) aren't scanned as body links,
+    // and body line numbers stay file-accurate. splitLines mirrors the rest of the validator.
+    const parsed = parseFrontmatter(splitLines(text));
+    const body = parsed ? parsed.body : splitLines(text);
+    const startLine = parsed ? parsed.closeLineNo + 1 : 1;
+
+    let inFence = false;
+    for (let i = 0; i < body.length; i++) {
+      if (FENCE_RE.test(body[i])) { inFence = !inFence; continue; }
+      if (inFence) continue;
+      const lineNo = startLine + i;
+      const line = body[i].replace(INLINE_CODE_RE, ""); // don't flag links inside `inline code`
+      for (const m of line.matchAll(WIKI_LINK_RE)) {
+        const target = m[1].trim();
+        const ok = target.includes("/")
+          ? existPaths.has(target.toLowerCase())
+          : existStems.has(target.toLowerCase());
+        if (!ok) broken.push([rel, lineNo, `broken wiki-link [[${target}]] — no matching note`]);
+      }
+      for (const m of line.matchAll(MD_LINK_RE)) {
+        const target = m[1].split("#")[0].trim();
+        if (!target.endsWith(".md") || /^(https?:|mailto:|\/\/)/.test(target)) continue;
+        if (!existsSync(resolve(vaultRoot, rel, "..", target)))
+          broken.push([rel, lineNo, `broken link (${target}) — file not found`]);
+      }
+    }
+  }
+  return { broken };
+}
+
 function isAgentLog(path: string): boolean {
   try {
     const parsed = parseFrontmatter(splitLines(readFileSync(path, "utf8")));
@@ -129,6 +187,17 @@ function main() {
     count++;
     for (const [ln, msg] of errs) {
       console.log(`${r}:${ln}: ${msg}`);
+      total++;
+    }
+  }
+
+  // Link health is a whole-vault property — only meaningful on a full scan, so it's
+  // skipped in explicit (changed-files/pre-commit) mode; CI's full scan is the gate.
+  // ponytail: pre-commit won't catch broken links locally; CI will. Move into explicit
+  // mode too if that latency matters.
+  if (!explicit) {
+    for (const [rel, ln, msg] of checkLinks(vaultRoot).broken) {
+      console.log(`${rel}:${ln}: ${msg}`);
       total++;
     }
   }
