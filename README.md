@@ -59,6 +59,21 @@ Pick any subset interactively, add custom dirs, or edit `vault.config.json` afte
 semantic type there makes it a valid `type:`, gives it a directory, and registers it as a
 distillation target with **zero code changes**.
 
+## MCP server
+
+Expose your vault to Claude Code, Claude Desktop, and other MCP clients:
+
+```bash
+bunx vault-init mcp --dir /path/to/your/vault
+```
+
+Exposes two read-only tools:
+- **`vault_search`** — BM25 lexical search across notes (input: `query`, optional `limit`)
+- **`vault_snapshot`** — token-capped identity + rules digest (input: optional `budgetTokens`)
+
+Both are offline, deterministic adapters over the same functions used for validation and capture.
+See `templates/mcp/` for setup docs: wire into Claude Code `.mcp.json` or Claude Desktop `claude_desktop_config.json`.
+
 ## Requirements
 
 - [`bun`](https://bun.sh) ≥ 1.1 — runs the TypeScript directly, no build step.

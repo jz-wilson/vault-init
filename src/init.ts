@@ -192,7 +192,19 @@ function writeExamples(target: string, config: ReturnType<typeof buildConfig>) {
 }
 
 async function main() {
-  const f = parseFlags(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === "mcp") {
+    try {
+      const { runMcp } = await import("./mcp.ts");
+      await runMcp(argv.slice(1));
+    } catch (e: any) {
+      console.error(`error: ${e.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  const f = parseFlags(argv);
   if (!f.yes) { await interactive(); return; }
 
   const name = (f.name as string) || "vault";

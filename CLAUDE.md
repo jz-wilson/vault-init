@@ -9,6 +9,7 @@ All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@
 - `bun test` — 66 `bun:test` cases across 7 files (originals ported from Python `--self-check` asserts)
 - `bun src/init.ts --yes --dir <path> --preset sre|homelab|okf|blank [--force] [--no-examples]` — scaffold
 - `bunx vault-init` — interactive scaffold (clack prompts)
+- `bunx vault-init mcp --dir <vault>` — stdio MCP server exposing vault_search + vault_snapshot (offline, read-only)
 
 ## Architecture
 
@@ -21,6 +22,9 @@ All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@
   per-folder index.md, token-capped identity digest, BM25 lexical search (injectable `ScoreFn` seam),
   wiki/raw worklist + auditable processing, journal per-turn append. All pure-function-over-a-tree,
   zero network/LLM — LLM-driven steps are the invoking agent's job (see templates/hooks/).
+- `src/mcp.ts` — MCP server (issue #3): thin adapter exposing `vault_search` and `vault_snapshot` via
+  `@modelcontextprotocol/sdk` (the package's 2nd runtime dep). NOT in `OPERATIONAL` — vendored scripts
+  stay zero-dep.
 - `OPERATIONAL` scripts (init.ts) are **vendored** into every scaffolded vault's `scripts/` —
   self-contained, no network dep at commit time. Keep that list in sync with new src files meant to ship.
 
@@ -38,7 +42,8 @@ All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@
   (resolve + `startsWith(base)`), used by index/snapshot/config loading; `resolvePath()` in capture.ts
   and `assertPlainFilename()` in nightly.ts reject `/`, `\`, `.`, `..` outright; `safeJoin()` in
   init.ts guards scaffold targets. Apply one of these to any new CLI flag or config field that
-  reaches a filesystem path.
+  reaches a filesystem path. The MCP `--dir` flag is a trust boundary: validated (resolve +
+  `vault.config.json` existence check); all per-file paths inside still go through `resolveInside()`.
 - **Date comparisons must be pure calendar-date, not epoch-ms.** `consolidate.ts`'s `dateOrNull()`
   parses `YYYY-MM-DD` as UTC midnight; `todayCalendarDate()` recasts the local Y-M-D the same way
   before comparing. Mixing a UTC-midnight date with a raw `new Date()` instant reintroduces
