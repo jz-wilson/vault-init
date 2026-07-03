@@ -31,6 +31,10 @@ export interface Derived {
   ALL_DIRS: string[];
 }
 
+/** Non-content subtrees every vault scanner skips (VCS, deps, editor/tool state, generated/operational dirs).
+ *  Tools layer their own intentional extras on top — see search.ts / validate-vault.ts. */
+export const NONCONTENT_SUBTREES = new Set([".git", "node_modules", ".obsidian", ".claude", ".omc", "scripts", "dashboard"]);
+
 /** resolve() that refuses to escape base — the canonical traversal guard for anything
  *  user-supplied that becomes a path (config dirs, CLI dir args, snapshot file lists). */
 export function resolveInside(base: string, rel: string, label = "path"): string {

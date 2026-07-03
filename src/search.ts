@@ -7,8 +7,12 @@
 import { readFileSync, existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseFrontmatter, splitLines } from "./frontmatter.ts";
+import { NONCONTENT_SUBTREES } from "./config.ts";
 
-const SKIP_SUBTREES = new Set(["scripts", "dashboard", ".git", "node_modules", ".obsidian"]);
+// NONCONTENT_SUBTREES (shared) newly closes a search-side gap: .claude/.omc tool state is no
+// longer indexed (previously only validate skipped those). On top, skip agents/ + handoffs/ —
+// internal coordination state, not recall material. Flip: drop those two to index them in search.
+const SKIP_SUBTREES = new Set([...NONCONTENT_SUBTREES, "agents", "handoffs"]);
 
 const K1 = 1.2;
 const B = 0.75;
