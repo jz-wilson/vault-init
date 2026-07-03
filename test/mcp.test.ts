@@ -86,52 +86,81 @@ test("resolveVaultDir throws when the dir has no vault.config.json", () => {
 
 // ---- stdio smoke: SDK-on-Bun contract via `bun src/init.ts mcp --dir <vault>` ----
 
-test("stdio smoke: tools/list over `bun src/init.ts mcp --dir <vault>` returns both tools", async () => {
-  const dir = setupVault();
-  const repoRoot = join(import.meta.dir, "..");
+const frame = (obj: unknown): string => JSON.stringify(obj) + "\n";
 
+/** Read newline-delimited JSON-RPC responses until every wanted id is seen or the deadline hits.
+ *  Polls the stream (races each read against the remaining time) instead of a fixed sleep. */
+async function collectResponses(
+  stream: ReadableStream<Uint8Array>,
+  wantIds: number[],
+  deadlineMs = 5000,
+): Promise<Map<number, any>> {
+  const reader = stream.getReader();
+  const dec = new TextDecoder();
+  const out = new Map<number, any>();
+  const deadline = Date.now() + deadlineMs;
+  let buf = "";
+  try {
+    while (out.size < wantIds.length && Date.now() < deadline) {
+      const timer = new Promise<"timeout">((r) => setTimeout(() => r("timeout"), Math.max(0, deadline - Date.now())));
+      const res = await Promise.race([reader.read(), timer]);
+      if (res === "timeout" || res.done) break;
+      buf += dec.decode(res.value, { stream: true });
+      let nl: number;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line) continue;
+        const msg = JSON.parse(line);
+        if (typeof msg.id === "number" && wantIds.includes(msg.id)) out.set(msg.id, msg);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return out;
+}
+
+const toolResult = (resp: any) => JSON.parse(resp.result.content[0].text);
+
+test("stdio: tools/list + tools/call for both tools over `bun src/init.ts mcp --dir <vault>`", async () => {
+  const dir = setupVault();
   const proc = Bun.spawn({
     cmd: ["bun", "src/init.ts", "mcp", "--dir", dir],
-    cwd: repoRoot,
+    cwd: join(import.meta.dir, ".."),
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
   });
 
-  function frame(obj: unknown): string {
-    return JSON.stringify(obj) + "\n";
-  }
-
-  proc.stdin.write(
-    frame({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "initialize",
-      params: {
-        protocolVersion: "2024-11-05",
-        capabilities: {},
-        clientInfo: { name: "mcp-test", version: "0.0.1" },
-      },
-    }),
-  );
-  await proc.stdin.flush();
+  proc.stdin.write(frame({
+    jsonrpc: "2.0", id: 1, method: "initialize",
+    params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "mcp-test", version: "0.0.1" } },
+  }));
   proc.stdin.write(frame({ jsonrpc: "2.0", method: "notifications/initialized" }));
-  await proc.stdin.flush();
   proc.stdin.write(frame({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }));
+  proc.stdin.write(frame({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "vault_search", arguments: { query: "kubernetes", limit: 5 } } }));
+  proc.stdin.write(frame({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "vault_snapshot", arguments: {} } }));
   await proc.stdin.flush();
 
-  await new Promise((r) => setTimeout(r, 800));
+  const resp = await collectResponses(proc.stdout, [2, 3, 4]);
   proc.stdin.end();
-
-  const stdoutBuf = await new Response(proc.stdout).text();
   proc.kill();
 
-  const lines = stdoutBuf.split("\n").filter((l) => l.trim().length > 0);
-  const parsed = lines.map((l) => JSON.parse(l));
-  const listResp = parsed.find((p) => p.id === 2);
-
-  expect(Array.isArray(listResp?.result?.tools)).toBe(true);
-  const names = listResp.result.tools.map((t: { name: string }) => t.name);
+  // tools/list — both tools advertised
+  const names = resp.get(2)?.result?.tools?.map((t: { name: string }) => t.name);
   expect(names).toContain("vault_search");
   expect(names).toContain("vault_snapshot");
-});
+
+  // tools/call vault_search — real hit for the kubernetes note, not the sourdough one
+  const hits = toolResult(resp.get(3));
+  expect(Array.isArray(hits)).toBe(true);
+  expect(hits.length).toBeGreaterThan(0);
+  expect(hits[0].path).toBe("alpha.md");
+
+  // tools/call vault_snapshot — structured digest over the wire
+  const snap = toolResult(resp.get(4));
+  expect(snap.files).toEqual(["IDENTITY.md", "ALWAYS.md"]);
+  expect(typeof snap.snapshot).toBe("string");
+  expect(snap.budgetTokens).toBeGreaterThan(0);
+}, 15000);
