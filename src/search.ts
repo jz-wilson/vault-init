@@ -160,24 +160,27 @@ function loadNotesFromVault(vaultRoot: string): NoteInput[] {
   return notes;
 }
 
-function parseArgs(argv: string[]): { queryTerms: string[]; limit: number } {
+function parseArgs(argv: string[]): { queryTerms: string[]; limit: number; json: boolean } {
   const queryTerms: string[] = [];
   let limit = 10;
+  let json = false;
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--limit") {
       const n = Number(argv[++i]);
       if (Number.isFinite(n) && n > 0) limit = n;
+    } else if (argv[i] === "--json") {
+      json = true;
     } else {
       queryTerms.push(argv[i]);
     }
   }
-  return { queryTerms, limit };
+  return { queryTerms, limit, json };
 }
 
 function main() {
-  const { queryTerms, limit } = parseArgs(process.argv.slice(2));
+  const { queryTerms, limit, json } = parseArgs(process.argv.slice(2));
   if (queryTerms.length === 0) {
-    console.error("usage: search.ts <query terms...> [--limit N]");
+    console.error("usage: search.ts <query terms...> [--limit N] [--json]");
     process.exit(1);
   }
 
@@ -185,6 +188,10 @@ function main() {
   const notes = loadNotesFromVault(vaultRoot);
   const results = search(notes, queryTerms.join(" ")).slice(0, limit);
 
+  if (json) {
+    console.log(JSON.stringify(results, null, 2));
+    return;
+  }
   for (const r of results) console.log(`${r.path}:${r.line}: ${r.snippet}  (${r.score.toFixed(3)})`);
 }
 

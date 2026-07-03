@@ -160,7 +160,9 @@ function isAgentLog(path: string): boolean {
 }
 
 function main() {
-  const args = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const json = argv.includes("--json");
+  const args = argv.filter((a) => a !== "--json");
   const vaultRoot = resolve(import.meta.dir, "..");
   const { VALID_TYPES } = loadFromScript(import.meta.dir);
   const explicit = args.length > 0;
@@ -169,12 +171,11 @@ function main() {
     ? args.map((a) => resolve(a)).sort()
     : [...new Bun.Glob("**/*.md").scanSync(vaultRoot)].map((p) => resolve(vaultRoot, p)).sort();
 
-  let total = 0;
+  const errors: { path: string; line: number; msg: string }[] = [];
   let count = 0;
   for (const path of targets) {
     if (!existsSync(path)) {
-      console.log(`${path}:1: file not found`);
-      total++;
+      errors.push({ path: relative(vaultRoot, path), line: 1, msg: "file not found" });
       continue;
     }
     const rel = relative(vaultRoot, path);
@@ -185,28 +186,27 @@ function main() {
       ? validateAgentLog(path, vaultRoot)
       : validateVaultNote(path, vaultRoot, VALID_TYPES);
     count++;
-    for (const [ln, msg] of errs) {
-      console.log(`${r}:${ln}: ${msg}`);
-      total++;
-    }
+    for (const [ln, msg] of errs) errors.push({ path: r, line: ln, msg });
   }
 
   // Link health is a whole-vault property — only meaningful on a full scan, so it's
   // skipped in explicit (changed-files/pre-commit) mode; CI's full scan is the gate.
   // ponytail: pre-commit won't catch broken links locally; CI will. Move into explicit
   // mode too if that latency matters.
-  if (!explicit) {
-    for (const [rel, ln, msg] of checkLinks(vaultRoot).broken) {
-      console.log(`${rel}:${ln}: ${msg}`);
-      total++;
-    }
+  if (!explicit)
+    for (const [path, line, msg] of checkLinks(vaultRoot).broken) errors.push({ path, line, msg });
+
+  if (json) {
+    console.log(JSON.stringify({ ok: errors.length === 0, count, errorCount: errors.length, errors }, null, 2));
+    process.exit(errors.length === 0 ? 0 : 1);
   }
 
-  if (total === 0) {
+  for (const e of errors) console.log(`${e.path}:${e.line}: ${e.msg}`);
+  if (errors.length === 0) {
     console.log(`✓ ${count} files validated, 0 errors`);
     process.exit(0);
   }
-  console.log(`✗ ${count} files validated, ${total} errors found`);
+  console.log(`✗ ${count} files validated, ${errors.length} errors found`);
   process.exit(1);
 }
 

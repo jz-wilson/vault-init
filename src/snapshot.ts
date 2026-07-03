@@ -101,7 +101,8 @@ function main() {
   const { cfg } = loadFromScript(import.meta.dir);
   const snapshotCfg: SnapshotConfig = cfg.snapshot ?? DEFAULT_SNAPSHOT;
 
-  const budgetOverride = parseBudgetFlag(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  const budgetOverride = parseBudgetFlag(argv);
   const budgetTokens = budgetOverride ?? snapshotCfg.budget_tokens;
 
   const files: { path: string; content: string }[] = [];
@@ -117,7 +118,10 @@ function main() {
     files.push({ path: rel, content: readFileSync(full, "utf8") });
   }
 
-  console.log(buildSnapshot(files, budgetTokens));
+  const snapshot = buildSnapshot(files, budgetTokens);
+  if (argv.includes("--json"))
+    console.log(JSON.stringify({ budgetTokens, files: files.map((f) => f.path), snapshot }, null, 2));
+  else console.log(snapshot);
 }
 
 if (import.meta.main) main();
