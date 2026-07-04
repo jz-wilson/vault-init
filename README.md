@@ -19,7 +19,7 @@ work-vault/
   incidents/ decisions/    episodic notes — monthly dated logs
   scripts/*.ts             validate · capture · consolidate · dashboard (vendored, no deps)
   .githooks/pre-commit     schema gate (local)
-  .forgejo/workflows/      schema gate (server-side — closes the MCP/API bypass)
+  .github/workflows/       schema gate (server-side — closes the MCP/API bypass)
   vault.config.json        the one place directories are configured
   _format.md AGENTS.md     the schema + agent protocol (single source of truth)
   SEED-PROMPT.md           hand to an AI to populate content

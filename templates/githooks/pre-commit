@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Validate agent logs before commit. Closes nothing if you commit via a path that
-# skips hooks — the CI workflow is the backstop for that (see .forgejo/workflows/).
+# skips hooks — the CI workflow is the backstop for that (see .github/workflows/).
 set -euo pipefail
 
 if ! command -v bun >/dev/null 2>&1; then

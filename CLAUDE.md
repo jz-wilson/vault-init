@@ -1,13 +1,13 @@
 # CLAUDE.md
 
 `vault-init` — bunx CLI scaffolding an agent-coordination + memory vault (plain markdown + git).
-All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@0.1.0`, GitHub
+All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@0.3.0`, GitHub
 `jz-wilson/vault-init`.
 
 ## Commands
 
-- `bun test` — 66 `bun:test` cases across 7 files (originals ported from Python `--self-check` asserts)
-- `bun src/init.ts --yes --dir <path> --preset sre|homelab|okf|blank [--force] [--no-examples]` — scaffold
+- `bun test` — 83 `bun:test` cases across 10 files in `test/` (originals ported from Python `--self-check` asserts)
+- `bun src/init.ts --yes --dir <path> --preset sre|homelab|okf|blank [--force] [--no-examples] [--nightly]` — scaffold
 - `bunx vault-init` — interactive scaffold (clack prompts)
 - `bunx vault-init mcp --dir <vault>` — stdio MCP server exposing vault_search + vault_snapshot (offline, read-only)
 
@@ -31,6 +31,10 @@ All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@
 ## Design decisions — don't relitigate
 
 - Archival decoupled from `verified` (age-only, `completed` + >90d).
+- Nightly runs on the machine the vault lives on — `scripts/nightly.sh` scheduled by
+  `setupNightly()` in init.ts (systemd user timer → crontab → printed instructions; opt-in via
+  `--nightly` or the interactive prompt), never CI. Scaffold always git-inits and makes an
+  initial commit; a remote is optional.
 - Pre-commit hook **and** CI both run the validator (closes local-hook bypass).
 - No build step — bun runs `.ts` directly.
 

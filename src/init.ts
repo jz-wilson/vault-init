@@ -52,6 +52,7 @@ function parseFlags(argv: string[]) {
     if (a === "--yes" || a === "-y") f.yes = true;
     else if (a === "--no-examples") f.noExamples = true;
     else if (a === "--force") f.force = true;
+    else if (a === "--nightly") f.nightly = true;
     else if (a.startsWith("--")) f[a.slice(2)] = argv[++i];
   }
   return f;
@@ -105,6 +106,9 @@ async function interactive() {
     p.cancel(e.message);
     process.exit(1);
   }
+  const nightly = await p.confirm({ message: "Schedule nightly maintenance on this machine (systemd/cron)?", initialValue: true });
+  if (!p.isCancel(nightly) && nightly) p.note(setupNightly(target, name as string), "nightly");
+
   p.outro(`Done. Read SEED-PROMPT.md to populate it with an AI.`);
 
   const switchNow = await p.confirm({ message: `Switch to ${dir} now?`, initialValue: true });
@@ -119,7 +123,7 @@ function scaffold(target: string, config: ReturnType<typeof buildConfig>, exampl
     throw new Error(`target directory '${target}' already exists and is not empty — pass --force to overwrite`);
 
   const allDirs = [
-    "agents", "dashboard", "handoffs", "scripts", ".githooks", ".forgejo/workflows",
+    "agents", "dashboard", "handoffs", "scripts", ".githooks", ".github/workflows",
     ...Object.values(config.semantic_dirs), ...Object.values(config.episodic_dirs), ...config.extra_dirs,
   ];
   for (const d of allDirs) mkdirSync(safeJoin(target, d), { recursive: true });
@@ -148,14 +152,17 @@ function scaffold(target: string, config: ReturnType<typeof buildConfig>, exampl
   // copy static templates (hooks, ci, docs, seed prompt)
   copyTpl(join(TEMPLATES, "githooks", "pre-commit"), join(target, ".githooks", "pre-commit"));
   chmodSync(join(target, ".githooks", "pre-commit"), 0o755);
-  copyTpl(join(TEMPLATES, "ci", "validate.yml"), join(target, ".forgejo", "workflows", "validate.yml"));
-  copyTpl(join(TEMPLATES, "ci", "nightly.yml"), join(target, ".forgejo", "workflows", "nightly.yml"));
+  copyTpl(join(TEMPLATES, "ci", "validate.yml"), join(target, ".github", "workflows", "validate.yml"));
+  // nightly runs on the machine the vault lives on (scripts/nightly.sh + --nightly), not CI —
+  // a remote runner can't see a local-only vault, and the vault needs no remote at all.
+  copyTpl(join(TEMPLATES, "scripts", "nightly.sh"), join(target, "scripts", "nightly.sh"));
+  chmodSync(join(target, "scripts", "nightly.sh"), 0o755);
   // hook-wiring docs ship next to the scripts they wire; scripts/ is validator-skipped
   for (const h of ["session-start-snapshot.md", "log-turn-hook.md", "nightly-automation.md"])
     copyTpl(join(TEMPLATES, "hooks", h), join(target, "scripts", "hooks", h));
   for (const doc of ["_format.md", "AGENTS.md", "README.md", "IDENTITY.md", "ALWAYS.md", "NEVER.md"]) copyTpl(join(TEMPLATES, "docs", doc), join(target, doc));
   copyTpl(join(TEMPLATES, "SEED-PROMPT.md"), join(target, "SEED-PROMPT.md"));
-  writeFileSync(join(target, ".gitignore"), "handoffs/\ndashboard/status.txt\n");
+  writeFileSync(join(target, ".gitignore"), "handoffs/\ndashboard/status.txt\n.nightly.log\n");
 
   if (examples) writeExamples(target, config);
 
@@ -165,11 +172,51 @@ function scaffold(target: string, config: ReturnType<typeof buildConfig>, exampl
     if (existsSync(full) && readdirSync(full).length === 0) writeFileSync(join(full, ".gitkeep"), "");
   }
 
-  // git init + hooks path
+  // git init + hooks path — the vault is always a git repo (local-only is fine, no remote needed)
   if (!existsSync(join(target, ".git"))) {
     Bun.spawnSync(["git", "init", "-q"], { cwd: target });
   }
   Bun.spawnSync(["git", "config", "core.hooksPath", ".githooks"], { cwd: target });
+
+  // initial commit so the scaffold state is captured — only when the repo has no history yet
+  if (Bun.spawnSync(["git", "rev-parse", "-q", "--verify", "HEAD"], { cwd: target }).exitCode !== 0) {
+    const hasIdentity = Bun.spawnSync(["git", "config", "user.email"], { cwd: target }).exitCode === 0;
+    const idFlags = hasIdentity ? [] : ["-c", "user.name=vault-init", "-c", "user.email=vault-init@localhost"];
+    Bun.spawnSync(["git", "add", "-A"], { cwd: target });
+    const commit = Bun.spawnSync(["git", ...idFlags, "commit", "-q", "-m", "chore: scaffold vault (vault-init)"], { cwd: target });
+    if (commit.exitCode !== 0)
+      console.error(`warning: initial commit failed — commit manually:\n${commit.stderr.toString().trim()}`);
+  }
+}
+
+/** Schedule scripts/nightly.sh on this machine — the vault's own machine, not CI.
+ *  Prefers a systemd user timer, falls back to crontab, else prints instructions. */
+function setupNightly(target: string, name: string): string {
+  const unit = "vault-nightly-" + name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+  const runner = join(target, "scripts", "nightly.sh");
+
+  if (Bun.spawnSync(["systemctl", "--user", "show-environment"]).exitCode === 0) {
+    const unitDir = join(homedir(), ".config", "systemd", "user");
+    mkdirSync(unitDir, { recursive: true });
+    writeFileSync(join(unitDir, `${unit}.service`),
+      `[Unit]\nDescription=vault nightly maintenance (${name})\n\n[Service]\nType=oneshot\nExecStart=${runner}\n`);
+    writeFileSync(join(unitDir, `${unit}.timer`),
+      `[Unit]\nDescription=vault nightly maintenance (${name})\n\n[Timer]\nOnCalendar=*-*-* 09:00:00\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n`);
+    Bun.spawnSync(["systemctl", "--user", "daemon-reload"]);
+    const en = Bun.spawnSync(["systemctl", "--user", "enable", "--now", `${unit}.timer`]);
+    if (en.exitCode === 0) return `systemd user timer ${unit}.timer enabled (daily 09:00)`;
+  }
+
+  if (Bun.spawnSync(["crontab", "-l"], { stdout: "pipe", stderr: "pipe" }).exitCode <= 1) {
+    // exit 0 = has crontab, 1 = none yet — both mean crontab(1) works
+    const existing = Bun.spawnSync(["crontab", "-l"], { stdout: "pipe", stderr: "pipe" }).stdout.toString();
+    if (existing.includes(runner)) return `cron entry for ${runner} already present`;
+    const line = `0 9 * * * ${runner} >> ${join(target, ".nightly.log")} 2>&1\n`;
+    const w = Bun.spawnSync(["crontab", "-"], { stdin: Buffer.from((existing.trim() ? existing.trimEnd() + "\n" : "") + line) });
+    if (w.exitCode === 0) return `cron entry added (daily 09:00) → ${runner}`;
+  }
+
+  return `no scheduler found — run ${runner} daily yourself (see scripts/hooks/nightly-automation.md)`;
 }
 
 function copyTpl(src: string, dest: string) {
@@ -218,6 +265,8 @@ async function main() {
     process.exit(1);
   }
   console.log(`✓ scaffolded ${preset} vault → ${target}`);
+  if (f.nightly) console.log(`  nightly: ${setupNightly(target, name)}`);
+  else console.log(`  nightly: pass --nightly to schedule scripts/nightly.sh on this machine`);
   console.log(`  next: cd ${target} && bun run dashboard`);
 }
 
