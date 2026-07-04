@@ -101,6 +101,10 @@ export function pushToRemote(vaultRoot: string): void {
 }
 
 function printList(vaultRoot: string): void {
+  if (!existsSync(join(vaultRoot, RAW_DIR))) {
+    console.log(`nightly: no ${RAW_DIR}/ dir — clipping worklist disabled (create it to enable)`);
+    return;
+  }
   const files = listUnprocessed(vaultRoot);
   if (!files.length) {
     console.log(`nightly: 0 unprocessed clipping(s) in ${RAW_DIR}/`);

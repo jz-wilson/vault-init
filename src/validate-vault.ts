@@ -163,10 +163,26 @@ function isAgentLog(path: string): boolean {
 function main() {
   const argv = process.argv.slice(2);
   const json = argv.includes("--json");
-  const args = argv.filter((a) => a !== "--json");
+  const linksOnly = argv.includes("--links");
+  const args = argv.filter((a) => a !== "--json" && a !== "--links");
   const vaultRoot = resolve(import.meta.dir, "..");
   const { VALID_TYPES } = loadFromScript(import.meta.dir);
   const explicit = args.length > 0;
+
+  // --links: whole-vault broken-link check only, no per-file schema validation.
+  // Link health is a whole-vault property, so this is the mode pre-commit uses —
+  // it can't schema-flag skip-files (README etc.) the way explicit file args would.
+  if (linksOnly) {
+    const broken = checkLinks(vaultRoot).broken;
+    if (json) {
+      console.log(JSON.stringify({ ok: broken.length === 0, errorCount: broken.length,
+        errors: broken.map(([path, line, msg]) => ({ path, line, msg })) }, null, 2));
+      process.exit(broken.length === 0 ? 0 : 1);
+    }
+    for (const [path, line, msg] of broken) console.log(`${path}:${line}: ${msg}`);
+    console.log(broken.length === 0 ? "✓ links ok" : `✗ ${broken.length} broken link(s)`);
+    process.exit(broken.length === 0 ? 0 : 1);
+  }
 
   const targets = explicit
     ? args.map((a) => resolve(a)).sort()
@@ -190,10 +206,9 @@ function main() {
     for (const [ln, msg] of errs) errors.push({ path: r, line: ln, msg });
   }
 
-  // Link health is a whole-vault property — only meaningful on a full scan, so it's
-  // skipped in explicit (changed-files/pre-commit) mode; CI's full scan is the gate.
-  // ponytail: pre-commit won't catch broken links locally; CI will. Move into explicit
-  // mode too if that latency matters.
+  // Link health is a whole-vault property — skipped in explicit (changed-files) mode
+  // to keep errors scoped to the named files. Pre-commit covers links via `--links`;
+  // CI's full scan is the backstop.
   if (!explicit)
     for (const [path, line, msg] of checkLinks(vaultRoot).broken) errors.push({ path, line, msg });
 
