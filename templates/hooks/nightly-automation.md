@@ -1,8 +1,11 @@
 # Nightly automation — systemd timer + cron
 
 ## Summary
-Runs `bun scripts/nightly.ts` on a recurring local schedule (as an alternative or
-complement to `templates/ci/nightly.yml`'s Forgejo/GitHub Actions `schedule:` trigger).
+Nightly runs happen **on the machine the vault lives on** — never CI (a remote runner
+can't see a local-only vault, and the vault needs no remote at all). `vault-init --nightly`
+(or the interactive prompt) detects this machine's scheduler and installs `scripts/nightly.sh`
+as a systemd user timer, falling back to crontab, daily 09:00. This doc covers what that
+runner does and how to wire it by hand if neither scheduler exists.
 
 ## Notes
 

@@ -40,6 +40,12 @@ test("extractTagsList handles inline and block", () => {
   expect(extractTagsList(["tags:", "- a", "- b", "type: x"])).toEqual(["a", "b"]);
 });
 
+test("extractTagsList parses malformed brackets leniently, not as one garbage tag", () => {
+  expect(extractTagsList(["tags: [a, b"])).toEqual(["a", "b"]);   // missing close
+  expect(extractTagsList(["tags: a, b]"])).toEqual(["a", "b"]);   // missing open
+  expect(extractTagsList(["tags: agent-log"])).toEqual(["agent-log"]); // bare tag: still one tag
+});
+
 test("splitLines mirrors python splitlines for trailing newline", () => {
   expect(splitLines("a\n")).toEqual(["a"]);
   expect(splitLines("a\n\n")).toEqual(["a", ""]);
@@ -110,6 +116,22 @@ test("capture: create + insertBullet round-trips and bumps updated", () => {
   expect(extractField(fm, "updated")).toBe(ymd(today));
 });
 
+test("capture: insertBullet inserts updated: when absent, without clobbering the first fm field", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vt-"));
+  mkdirSync(join(dir, "projects"));
+  const path = join(dir, "projects", "no-updated.md");
+  // valid frontmatter EXCEPT no `updated:` — tags sits on the first fm line, the one
+  // the old fmLineNo fallback would clobber.
+  const orig = `---\ntags: [project]\ntype: project\n---\n\n# T\n\n## Summary\ns\n\n## Notes\n\n## Related\n_(none yet)_\n`;
+  writeFileSync(path, orig);
+  const today = new Date();
+  insertBullet(path, "fact", today, dir, D.VALID_TYPES);
+
+  const fm = parseFrontmatter(splitLines(readFileSync(path, "utf8")))!.fm;
+  expect(extractField(fm, "updated")).toBe(ymd(today)); // inserted, not faked onto another line
+  expect(extractField(fm, "tags")).toBe("[project]");   // first fm line preserved, not clobbered
+});
+
 test("capture: episodic type routes to monthly file", () => {
   const today = new Date();
   const p = resolvePath(D, "/v", "decision", "", today);
@@ -166,6 +188,19 @@ test("consolidate: distillation flags log linking a stale semantic note", () => 
   const today = new Date();
   const recent = ymd(new Date(today.getTime() - 10 * 86400_000));
   writeFileSync(join(dir, "agents", "ta", "reports", `${recent}-x.md`), logFile(recent, "X", "completed"));
+  const pairs = findDistillationCandidates(D, dir);
+  expect(pairs.length).toBeGreaterThanOrEqual(1);
+  expect(pairs[0][1]).toContain("my-project.md");
+});
+
+test("consolidate: extracts links under a '## Related Notes' heading, not just exact '## Related'", () => {
+  // validateVaultNote accepts '## Related Notes' (substring check), so extraction
+  // must too — else the linked note is silently dropped from distillation.
+  const dir = buildVaultForConsolidate();
+  const today = new Date();
+  const recent = ymd(new Date(today.getTime() - 10 * 86400_000));
+  const log = logFile(recent, "X", "completed").replace("## Related", "## Related Notes");
+  writeFileSync(join(dir, "agents", "ta", "reports", `${recent}-x.md`), log);
   const pairs = findDistillationCandidates(D, dir);
   expect(pairs.length).toBeGreaterThanOrEqual(1);
   expect(pairs[0][1]).toContain("my-project.md");

@@ -5,7 +5,7 @@
 // hook (see templates/hooks/session-start-snapshot.md) and have its stdout injected as context.
 import { existsSync, readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { loadFromScript, resolveInside, type SnapshotConfig } from "./config.ts";
+import { loadFromScript, resolveInside, runMain, type SnapshotConfig } from "./config.ts";
 
 export const DEFAULT_SNAPSHOT: SnapshotConfig = {
   files: ["IDENTITY.md", "ALWAYS.md", "NEVER.md", "AGENTS.md"],
@@ -129,4 +129,4 @@ function main() {
   else console.log(snapshot);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);

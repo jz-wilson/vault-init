@@ -55,6 +55,21 @@ function assertInsideVault(vaultRoot: string, label: string, dir: string): void 
   resolveInside(vaultRoot, dir, `vault.config.json: ${label}`);
 }
 
+/** Run a script entry point, turning any thrown/rejected error into a clean
+ *  `error: <msg>` + exit(1) instead of leaking a raw stack trace to the user. */
+export function runMain(main: () => unknown): void {
+  const die = (e: any): never => {
+    console.error(`error: ${e?.message ?? e}`);
+    process.exit(1);
+  };
+  try {
+    const r = main();
+    if (r instanceof Promise) r.catch(die);
+  } catch (e) {
+    die(e);
+  }
+}
+
 export function loadConfig(vaultRoot: string): VaultConfig {
   const raw = JSON.parse(readFileSync(join(vaultRoot, "vault.config.json"), "utf8"));
   const semantic_dirs: Record<string, string> = raw.semantic_dirs ?? {};

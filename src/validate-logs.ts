@@ -8,6 +8,7 @@ import {
   DATE_RE, extractField, fmLineNo, checkBodyPaths, isValidCalendarDate,
   validateCommonNoteShape, type LineError,
 } from "./frontmatter.ts";
+import { runMain } from "./config.ts";
 
 const REQUIRED_FIELDS = ["updated", "tags", "type", "agent", "status", "task", "priority", "date"];
 const VALID_STATUS = ["active", "blocked", "awaiting-approval", "completed", "error"];
@@ -116,4 +117,4 @@ function main() {
   process.exit(1);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);

@@ -58,12 +58,15 @@ export function extractField(fm: string[], field: string): string | null {
   return null;
 }
 
-export function fmLineNo(fm: string[], field: string, fmStart = 2): number {
+// notFound defaults to fmStart so validators can point an error at the top of the
+// frontmatter block; a caller that overwrites the returned line must pass a sentinel
+// (e.g. -1) to tell "field absent" apart from "field on the first line".
+export function fmLineNo(fm: string[], field: string, fmStart = 2, notFound = fmStart): number {
   const prefix = field + ":";
   for (let i = 0; i < fm.length; i++) {
     if (fm[i].trim().startsWith(prefix)) return fmStart + i;
   }
-  return fmStart;
+  return notFound;
 }
 
 /** Extract tags list, handling inline [a, b] and block (- a) forms. null if absent. */
@@ -74,8 +77,12 @@ export function extractTagsList(fm: string[]): string[] | null {
     if (!stripped.startsWith(prefix)) continue;
     const inlineVal = stripped.slice(prefix.length).trim();
     if (inlineVal) {
-      if (inlineVal.startsWith("[") && inlineVal.endsWith("]")) {
-        const inner = inlineVal.slice(1, -1);
+      // Any bracket present means an inline-array form — parse it leniently even if a
+      // bracket is missing (`[a, b`), so a malformed line yields its intended tags
+      // instead of one garbage tag that slips past validation. Only a truly
+      // bracket-less value is a bare single tag.
+      if (inlineVal.startsWith("[") || inlineVal.endsWith("]")) {
+        const inner = inlineVal.replace(/^\[/, "").replace(/\]$/, "");
         return inner
           .split(",")
           .map((t) => t.trim().replace(/^['"]|['"]$/g, ""))

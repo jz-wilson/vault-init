@@ -6,7 +6,7 @@
 //   log-turn.ts "decided to defer phase 4 to next sprint"
 import { existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { loadFromScript, type Derived } from "./config.ts";
+import { loadFromScript, runMain, type Derived } from "./config.ts";
 import { resolvePath, createNote, insertBullet } from "./capture.ts";
 
 const JOURNAL_TYPE = "journal";
@@ -57,4 +57,4 @@ function main() {
   }
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);

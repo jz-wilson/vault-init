@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, join, relative, dirname } from "node:path";
 import { parseFrontmatter, extractField, splitLines } from "./frontmatter.ts";
 import { findAgentLogs } from "./validate-logs.ts";
+import { runMain } from "./config.ts";
 
 interface Log {
   agent: string; status: string; task: string; priority: string;
@@ -151,4 +152,4 @@ function main() {
   if (intervalSec > 0) setInterval(() => renderOnce(vaultRoot, true), intervalSec * 1000);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);

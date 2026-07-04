@@ -7,7 +7,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { relative, resolve, dirname, join } from "node:path";
 import { parseFrontmatter, fmLineNo, splitLines } from "./frontmatter.ts";
-import { loadFromScript, type Derived } from "./config.ts";
+import { loadFromScript, runMain, type Derived } from "./config.ts";
 import { validateVaultNote } from "./validate-vault.ts";
 
 export function ymd(d: Date) {
@@ -69,9 +69,12 @@ export function insertBullet(path: string, fact: string, today: Date, vaultRoot:
   if (parsed === null) throw new Error(`${path}: frontmatter missing or malformed`);
 
   const todayStr = ymd(today);
-  // 1. bump updated: (fmLineNo returns 1-based file line; fm starts at file line 2)
-  const updatedFileLine = fmLineNo(parsed.fm, "updated", 2);
-  lines[updatedFileLine - 1] = `updated: ${todayStr}`;
+  // 1. bump updated: (fmLineNo returns 1-based file line; fm starts at file line 2).
+  // If the note has no updated: field, insert one right after the opening `---`
+  // rather than clobbering whatever sits on the first frontmatter line.
+  const updatedFileLine = fmLineNo(parsed.fm, "updated", 2, -1);
+  if (updatedFileLine === -1) lines.splice(1, 0, `updated: ${todayStr}`);
+  else lines[updatedFileLine - 1] = `updated: ${todayStr}`;
 
   // 2. insert dated bullet at end of ## Notes
   const idx = findNotesInsertIdx(lines);
@@ -141,4 +144,4 @@ function main() {
   console.log(`✓ captured → ${relative(vaultRoot, path)}`);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);
