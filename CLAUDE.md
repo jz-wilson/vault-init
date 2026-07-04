@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 `vault-init` — bunx CLI scaffolding an agent-coordination + memory vault (plain markdown + git).
-Bun port of 4 Python vault-tooling scripts + agentic-OS layer. npm `vault-init@0.4.0`, GitHub `jz-wilson/vault-init`.
+Bun port of 4 Python vault-tooling scripts + agentic-OS layer. npm `vault-init@0.4.1`, GitHub `jz-wilson/vault-init`.
 
 **`docs/` is the architecture memory** — `architecture.md` (flows, data structures, topography),
 `integrations.md` (module graph, git/systemd/MCP), `security.md` (traversal-guard table),
