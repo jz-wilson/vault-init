@@ -229,7 +229,7 @@ function writeExamples(target: string, config: ReturnType<typeof buildConfig>) {
   const semType = Object.keys(config.semantic_dirs)[0];
   const semDir = config.semantic_dirs[semType];
   if (semType) {
-    writeFileSync(join(target, semDir, "example.md"),
+    writeFileSync(join(safeJoin(target, semDir), "example.md"),
       `---\nupdated: ${today}\ntags: [${semType}]\ntype: ${semType}\n---\n\n# Example\n\n## Summary\nExample ${semType} note — delete me.\n\n## Notes\n- ${today}: scaffolded by vault-init\n\n## Related\n_(none yet)_\n`);
   }
   const logDir = join(target, "agents", "example-agent", "reports");
