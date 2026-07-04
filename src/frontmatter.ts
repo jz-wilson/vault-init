@@ -77,8 +77,12 @@ export function extractTagsList(fm: string[]): string[] | null {
     if (!stripped.startsWith(prefix)) continue;
     const inlineVal = stripped.slice(prefix.length).trim();
     if (inlineVal) {
-      if (inlineVal.startsWith("[") && inlineVal.endsWith("]")) {
-        const inner = inlineVal.slice(1, -1);
+      // Any bracket present means an inline-array form — parse it leniently even if a
+      // bracket is missing (`[a, b`), so a malformed line yields its intended tags
+      // instead of one garbage tag that slips past validation. Only a truly
+      // bracket-less value is a bare single tag.
+      if (inlineVal.startsWith("[") || inlineVal.endsWith("]")) {
+        const inner = inlineVal.replace(/^\[/, "").replace(/\]$/, "");
         return inner
           .split(",")
           .map((t) => t.trim().replace(/^['"]|['"]$/g, ""))

@@ -40,6 +40,12 @@ test("extractTagsList handles inline and block", () => {
   expect(extractTagsList(["tags:", "- a", "- b", "type: x"])).toEqual(["a", "b"]);
 });
 
+test("extractTagsList parses malformed brackets leniently, not as one garbage tag", () => {
+  expect(extractTagsList(["tags: [a, b"])).toEqual(["a", "b"]);   // missing close
+  expect(extractTagsList(["tags: a, b]"])).toEqual(["a", "b"]);   // missing open
+  expect(extractTagsList(["tags: agent-log"])).toEqual(["agent-log"]); // bare tag: still one tag
+});
+
 test("splitLines mirrors python splitlines for trailing newline", () => {
   expect(splitLines("a\n")).toEqual(["a"]);
   expect(splitLines("a\n\n")).toEqual(["a", ""]);
