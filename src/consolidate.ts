@@ -7,7 +7,7 @@
 import { readFileSync, existsSync, mkdirSync } from "node:fs";
 import { relative, resolve, join, basename, dirname } from "node:path";
 import { parseFrontmatter, extractField, splitLines, isValidCalendarDate } from "./frontmatter.ts";
-import { loadFromScript, type Derived } from "./config.ts";
+import { loadFromScript, runMain, type Derived } from "./config.ts";
 import { findAgentLogs } from "./validate-logs.ts";
 
 const ARCHIVE_THRESHOLD_DAYS = 90;
@@ -158,4 +158,4 @@ function main() {
   if (!archiveOk) process.exit(1);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);

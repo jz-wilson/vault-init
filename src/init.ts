@@ -5,6 +5,7 @@
 import { mkdirSync, writeFileSync, copyFileSync, existsSync, chmodSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, join, dirname, sep } from "node:path";
 import { homedir } from "node:os";
+import { runMain } from "./config.ts";
 
 const SRC = import.meta.dir; // package/src — holds the operational .ts to vendor
 const PKG = resolve(SRC, ".."); // package root — holds templates/
@@ -270,4 +271,4 @@ async function main() {
   console.log(`  next: cd ${target} && bun run dashboard`);
 }
 
-main();
+runMain(main);

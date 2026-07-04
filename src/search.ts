@@ -7,7 +7,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { parseFrontmatter, splitLines } from "./frontmatter.ts";
-import { NONCONTENT_SUBTREES, inSkippedSubtree } from "./config.ts";
+import { NONCONTENT_SUBTREES, inSkippedSubtree, runMain } from "./config.ts";
 
 // NONCONTENT_SUBTREES (shared) newly closes a search-side gap: .claude/.omc tool state is no
 // longer indexed (previously only validate skipped those). On top, skip agents/ + handoffs/ —
@@ -198,4 +198,4 @@ function main() {
   for (const r of results) console.log(`${r.path}:${r.line}: ${r.snippet}  (${r.score.toFixed(3)})`);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);

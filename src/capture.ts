@@ -7,7 +7,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { relative, resolve, dirname, join } from "node:path";
 import { parseFrontmatter, fmLineNo, splitLines } from "./frontmatter.ts";
-import { loadFromScript, type Derived } from "./config.ts";
+import { loadFromScript, runMain, type Derived } from "./config.ts";
 import { validateVaultNote } from "./validate-vault.ts";
 
 export function ymd(d: Date) {
@@ -144,4 +144,4 @@ function main() {
   console.log(`✓ captured → ${relative(vaultRoot, path)}`);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);

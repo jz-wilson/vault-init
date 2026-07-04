@@ -9,6 +9,7 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, statSync, lstatSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ymd } from "./capture.ts";
+import { runMain } from "./config.ts";
 
 const RAW_DIR = "wiki/raw";
 const PROCESSED_DIR = "wiki/processed";
@@ -161,4 +162,4 @@ function main() {
   process.exit(2);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);

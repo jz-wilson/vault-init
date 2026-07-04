@@ -139,6 +139,22 @@ test("CLI: --budget flag overrides configured budget_tokens", () => {
   expect(overridden.out).toContain("n".repeat(400));
 });
 
+test("CLI: bad input exits 1 with a clean `error:` line, not a raw stack trace (runMain)", () => {
+  // Flag-parse throw (parseBudgetFlag) — routes through runMain, not just loadSnapshotFiles' try/catch.
+  const dir = setupVault();
+  const bad = runSnapshot(dir, ["--budget", "abc"]);
+  expect(bad.code).toBe(1);
+  expect(bad.err.trim().startsWith("error:")).toBe(true);
+  expect(bad.err).toContain("invalid --budget value");
+  expect(bad.err).not.toContain(".ts:"); // no source-frame / stack leak
+
+  // Config-load throw (loadConfig JSON.parse) — same wrapper catches it.
+  writeFileSync(join(dir, "vault.config.json"), "not json");
+  const badCfg = runSnapshot(dir);
+  expect(badCfg.code).toBe(1);
+  expect(badCfg.err.trim().startsWith("error:")).toBe(true);
+});
+
 // ---- loadSnapshotFiles: loader parity ----
 
 test("loadSnapshotFiles: returns both present files, skips missing ones", () => {

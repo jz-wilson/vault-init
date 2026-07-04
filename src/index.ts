@@ -7,7 +7,7 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, join, relative, basename } from "node:path";
 import { parseFrontmatter, extractField, extractTagsList, splitLines } from "./frontmatter.ts";
-import { loadFromScript, resolveInside } from "./config.ts";
+import { loadFromScript, resolveInside, runMain } from "./config.ts";
 
 export interface NoteMeta {
   file: string; // filename incl. .md, e.g. "my-note.md"
@@ -151,4 +151,4 @@ function main() {
   if (count === 0) console.log("no target directories with notes found");
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);

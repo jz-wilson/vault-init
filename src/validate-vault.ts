@@ -9,7 +9,7 @@ import {
   checkBodyPaths, splitLines, validateCommonNoteShape, parseFrontmatter,
   FENCE_RE, INLINE_CODE_RE, type LineError,
 } from "./frontmatter.ts";
-import { loadFromScript, NONCONTENT_SUBTREES, inSkippedSubtree } from "./config.ts";
+import { loadFromScript, NONCONTENT_SUBTREES, inSkippedSubtree, runMain } from "./config.ts";
 import { validateAgentLog } from "./validate-logs.ts";
 
 const ROOT_SKIP_FILES = new Set(["CLAUDE.md", "AGENTS.md", "README.md", "RTK.md", "_format.md", "IDENTITY.md", "STACK.md", "SEED-PROMPT.md", "log.md", "ALWAYS.md", "NEVER.md", "SOUL.md"]);
@@ -211,4 +211,4 @@ function main() {
   process.exit(1);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) runMain(main);
