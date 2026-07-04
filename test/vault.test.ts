@@ -110,6 +110,22 @@ test("capture: create + insertBullet round-trips and bumps updated", () => {
   expect(extractField(fm, "updated")).toBe(ymd(today));
 });
 
+test("capture: insertBullet inserts updated: when absent, without clobbering the first fm field", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vt-"));
+  mkdirSync(join(dir, "projects"));
+  const path = join(dir, "projects", "no-updated.md");
+  // valid frontmatter EXCEPT no `updated:` — tags sits on the first fm line, the one
+  // the old fmLineNo fallback would clobber.
+  const orig = `---\ntags: [project]\ntype: project\n---\n\n# T\n\n## Summary\ns\n\n## Notes\n\n## Related\n_(none yet)_\n`;
+  writeFileSync(path, orig);
+  const today = new Date();
+  insertBullet(path, "fact", today, dir, D.VALID_TYPES);
+
+  const fm = parseFrontmatter(splitLines(readFileSync(path, "utf8")))!.fm;
+  expect(extractField(fm, "updated")).toBe(ymd(today)); // inserted, not faked onto another line
+  expect(extractField(fm, "tags")).toBe("[project]");   // first fm line preserved, not clobbered
+});
+
 test("capture: episodic type routes to monthly file", () => {
   const today = new Date();
   const p = resolvePath(D, "/v", "decision", "", today);

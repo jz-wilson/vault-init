@@ -58,12 +58,15 @@ export function extractField(fm: string[], field: string): string | null {
   return null;
 }
 
-export function fmLineNo(fm: string[], field: string, fmStart = 2): number {
+// notFound defaults to fmStart so validators can point an error at the top of the
+// frontmatter block; a caller that overwrites the returned line must pass a sentinel
+// (e.g. -1) to tell "field absent" apart from "field on the first line".
+export function fmLineNo(fm: string[], field: string, fmStart = 2, notFound = fmStart): number {
   const prefix = field + ":";
   for (let i = 0; i < fm.length; i++) {
     if (fm[i].trim().startsWith(prefix)) return fmStart + i;
   }
-  return fmStart;
+  return notFound;
 }
 
 /** Extract tags list, handling inline [a, b] and block (- a) forms. null if absent. */
