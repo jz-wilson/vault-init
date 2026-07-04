@@ -170,3 +170,16 @@ test("consolidate: distillation flags log linking a stale semantic note", () => 
   expect(pairs.length).toBeGreaterThanOrEqual(1);
   expect(pairs[0][1]).toContain("my-project.md");
 });
+
+test("consolidate: extracts links under a '## Related Notes' heading, not just exact '## Related'", () => {
+  // validateVaultNote accepts '## Related Notes' (substring check), so extraction
+  // must too — else the linked note is silently dropped from distillation.
+  const dir = buildVaultForConsolidate();
+  const today = new Date();
+  const recent = ymd(new Date(today.getTime() - 10 * 86400_000));
+  const log = logFile(recent, "X", "completed").replace("## Related", "## Related Notes");
+  writeFileSync(join(dir, "agents", "ta", "reports", `${recent}-x.md`), log);
+  const pairs = findDistillationCandidates(D, dir);
+  expect(pairs.length).toBeGreaterThanOrEqual(1);
+  expect(pairs[0][1]).toContain("my-project.md");
+});

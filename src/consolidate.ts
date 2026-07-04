@@ -49,7 +49,7 @@ function wikiLinksFromRelated(body: string[]): string[] {
   let inRelated = false;
   const links: string[] = [];
   for (const line of body) {
-    if (line === "## Related") {
+    if (line.startsWith("## Related")) {
       inRelated = true;
       continue;
     }
