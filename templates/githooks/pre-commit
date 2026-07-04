@@ -11,6 +11,10 @@ fi
 cd "$(git rev-parse --show-toplevel)"
 bun scripts/validate-logs.ts
 
+# Whole-vault broken-link check — link health can't be judged from changed files alone,
+# and vaults are small enough that the full scan is fast. CI's full validate is the backstop.
+bun scripts/validate-vault.ts --links
+
 # Regenerate per-folder index.md for any dir touched by this commit's staged .md files, then
 # stage the result. scripts/index.ts itself no-ops on dirs that aren't configured vault dirs,
 # so it's safe to just pass whatever dirs came up.
