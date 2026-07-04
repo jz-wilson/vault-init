@@ -2,7 +2,9 @@
 # Nightly vault maintenance — runs locally on the machine the vault lives on.
 # Installed to a schedule by vault-init (--nightly); safe to run by hand anytime.
 set -euo pipefail
-export PATH="$HOME/.bun/bin:$PATH" # cron/systemd start with a minimal PATH
+# cron/systemd start with a minimal PATH — cover the common bun install locations
+export PATH="$HOME/.bun/bin:/home/linuxbrew/.linuxbrew/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+command -v bun >/dev/null || { echo "nightly: bun not found in PATH" >&2; exit 1; }
 cd "$(dirname "$0")/.."
 
 bun scripts/validate-vault.ts
