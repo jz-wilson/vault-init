@@ -35,7 +35,8 @@ All-Node/Bun port of 4 Python vault-tooling scripts. Published: npm `vault-init@
   `setupNightly()` in init.ts (systemd user timer → crontab → printed instructions; opt-in via
   `--nightly` or the interactive prompt), never CI. Scaffold always git-inits and makes an
   initial commit; a remote is optional.
-- Pre-commit hook **and** CI both run the validator (closes local-hook bypass).
+- Scaffolded vault gets **both** a pre-commit hook and GitHub CI (`validate.yml`) running the
+  validator (closes local-hook bypass). vault-init's own gate is just GitHub CI `bun test`.
 - No build step — bun runs `.ts` directly.
 
 ## Gotchas
