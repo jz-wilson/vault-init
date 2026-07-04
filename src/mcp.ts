@@ -10,18 +10,23 @@ import { resolve, join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { loadConfig, type VaultConfig } from "./config.ts";
+import { loadConfig, resolveInside, requestedVaultDir, type VaultConfig } from "./config.ts";
+import { isLinked, claudeConfigDir } from "./link.ts";
 import { search, loadNotesFromVault, type Result } from "./search.ts";
 import { buildSnapshot, loadSnapshotFiles, DEFAULT_SNAPSHOT } from "./snapshot.ts";
 
+// Upper bound on vault_snapshot's budgetTokens and vault_read's returned chars — caller-supplied
+// overrides can't blow past what's reasonable to stuff into an LLM context.
+const MAX_BUDGET_TOKENS = 8000;
+const MAX_READ_CHARS = 100_000;
+
 const VERSION: string = JSON.parse(readFileSync(join(import.meta.dir, "..", "package.json"), "utf8")).version;
 
-/** Parse + validate --dir (trust boundary). Confirms a vault root exists there — not that the
- *  tree is well-formed; loadConfig/resolveInside still guard every per-file path inside. */
+/** Parse + validate --dir / $VAULT_DIR (trust boundary). Confirms a vault root exists there — not
+ *  that the tree is well-formed; loadConfig/resolveInside still guard every per-file path inside. */
 export function resolveVaultDir(argv: string[]): string {
-  const i = argv.indexOf("--dir");
-  const raw = i >= 0 ? argv[i + 1] : undefined;
-  if (!raw) throw new Error("mcp: --dir <vault> is required");
+  const raw = requestedVaultDir(argv);
+  if (!raw) throw new Error("mcp: --dir <vault> is required (or set $VAULT_DIR)");
   const dir = resolve(raw);
   if (!existsSync(join(dir, "vault.config.json")))
     throw new Error(`mcp: '${raw}' is not a vault (no vault.config.json)`);
@@ -39,12 +44,29 @@ export function runSnapshotTool(
 ): { budgetTokens: number; files: string[]; snapshot: string } {
   const scfg = cfg.snapshot ?? DEFAULT_SNAPSHOT;
   const files = loadSnapshotFiles(vaultRoot, scfg);
-  const budgetTokens = args.budgetTokens ?? scfg.budget_tokens;
+  const budgetTokens = Math.min(args.budgetTokens ?? scfg.budget_tokens, MAX_BUDGET_TOKENS);
   return { budgetTokens, files: files.map((f) => f.path), snapshot: buildSnapshot(files, budgetTokens) };
+}
+
+/** Read a single note's full text. vault-root-relative path only, .md only, traversal-guarded. */
+export function runReadTool(vaultRoot: string, args: { path: string }): string {
+  const full = resolveInside(vaultRoot, args.path, "vault_read path");
+  if (!args.path.endsWith(".md")) throw new Error(`vault_read: '${args.path}' is not a .md file`);
+  if (!existsSync(full)) throw new Error(`vault_read: '${args.path}' does not exist`);
+  const text = readFileSync(full, "utf8");
+  return text.length > MAX_READ_CHARS ? text.slice(0, MAX_READ_CHARS) + "\n…[truncated]" : text;
 }
 
 export async function runMcp(argv: string[]) {
   const vaultRoot = resolveVaultDir(argv);
+  // Setup gate: the server only runs for a vault that finished machine-wide setup — otherwise
+  // sessions outside the vault dir get tools but no primed context, a half-configured state
+  // that's confusing to debug from inside an MCP client.
+  if (!isLinked(claudeConfigDir(), vaultRoot))
+    throw new Error(
+      `mcp: vault '${vaultRoot}' is not linked with Claude Code — ` +
+      `run 'bunx vault-init doctor --dir ${vaultRoot}' to diagnose and fix setup (or 'bunx vault-init link --dir ${vaultRoot}')`,
+    );
   const cfg = loadConfig(vaultRoot);
 
   const server = new Server({ name: "vault-init", version: VERSION }, { capabilities: { tools: {} } });
@@ -73,6 +95,18 @@ export async function runMcp(argv: string[]) {
           },
         },
       },
+      {
+        name: "vault_read",
+        description:
+          "Read a single note's full text by vault-root-relative path. Get paths from vault_search results — don't guess them.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "vault-root-relative path to a .md note, e.g. 'projects/foo.md'" },
+          },
+          required: ["path"],
+        },
+      },
     ],
   }));
 
@@ -83,6 +117,8 @@ export async function runMcp(argv: string[]) {
       result = runSearchTool(vaultRoot, args as { query: string; limit?: number });
     } else if (req.params.name === "vault_snapshot") {
       result = runSnapshotTool(vaultRoot, cfg, args as { budgetTokens?: number });
+    } else if (req.params.name === "vault_read") {
+      result = runReadTool(vaultRoot, args as { path: string });
     } else {
       throw new Error(`unknown tool: ${req.params.name}`);
     }

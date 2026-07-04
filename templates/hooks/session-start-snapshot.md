@@ -7,8 +7,14 @@ token-capped digest of the highest-priority vault files (default: `IDENTITY.md`,
 session can prime on that instead of reading the whole vault.
 
 Claude Code's `SessionStart` hook runs a shell command and injects its stdout as session context.
-Wire the snapshot in by adding this to the vault's `.claude/settings.json` (create the file if it
-doesn't exist):
+
+**Scaffolded vaults already ship this wiring** — `.claude/settings.json` at the vault root carries
+the hook, so sessions launched *inside the vault* prime automatically. To prime sessions launched
+**anywhere on this machine**, run `bun run link` (wraps `scripts/link.ts`): it merges the same hook
+(with an absolute script path) into `~/.claude/settings.json`, adds a vault pointer to
+`~/.claude/CLAUDE.md`, and registers the MCP server user-scope. Idempotent; `--dry-run` previews.
+
+For manual wiring in some other project's `.claude/settings.json`, the shape is:
 
 ```json
 {
@@ -27,6 +33,7 @@ doesn't exist):
 }
 ```
 
-Run it from the vault root (the hook's cwd is the project directory Claude Code was launched in).
+The hook's cwd is the project directory Claude Code was launched in — from outside the vault, use
+an absolute path: `"command": "bun /abs/path/to/vault/scripts/snapshot.ts"`.
 To use a different token budget for this hook without touching `vault.config.json`, pass
 `"command": "bun scripts/snapshot.ts --budget 2000"` instead.

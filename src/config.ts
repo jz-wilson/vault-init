@@ -55,11 +55,20 @@ function assertInsideVault(vaultRoot: string, label: string, dir: string): void 
   resolveInside(vaultRoot, dir, `vault.config.json: ${label}`);
 }
 
+/** Vault dir requested by the caller: explicit `--dir` flag, else $VAULT_DIR, else null.
+ *  Callers layer their own local fallback (script parent, cwd) between the two. */
+export function requestedVaultDir(argv: string[]): string | null {
+  const i = argv.indexOf("--dir");
+  if (i >= 0 && argv[i + 1]) return argv[i + 1];
+  return process.env.VAULT_DIR ?? null;
+}
+
 /** Run a script entry point, turning any thrown/rejected error into a clean
  *  `error: <msg>` + exit(1) instead of leaking a raw stack trace to the user. */
 export function runMain(main: () => unknown): void {
   const die = (e: any): never => {
     console.error(`error: ${e?.message ?? e}`);
+    console.error(`  hint: if this looks like a setup problem, 'bunx vault-init doctor --dir <vault>' diagnoses and repairs it`);
     process.exit(1);
   };
   try {

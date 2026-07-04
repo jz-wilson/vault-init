@@ -27,6 +27,15 @@ The vault's `vault.config.json` must have a `journal` episodic type, e.g.:
 
 `log-turn.ts` exits with a clear error if `journal` isn't configured.
 
+### Requires `jq`
+
+Claude Code hooks receive a JSON payload on **stdin**, not env vars — there is no
+`$CLAUDE_TRANSCRIPT_PATH` or `$CLAUDE_TOOL_OUTPUT`. All hooks get `session_id`,
+`transcript_path`, `cwd`, `hook_event_name`; `PostToolUse` additionally gets `tool_name`,
+`tool_input`, `tool_output`. Both examples below read stdin once and pull fields with `jq`.
+Hook stdout isn't injected back into the transcript for `Stop`/`PostToolUse`, and a non-zero
+exit can block the flow, so every command ends `|| true`.
+
 ### `Stop` hook — summarize the finished turn, then log it
 
 `.claude/settings.json` (or global `~/.claude/settings.json`):
@@ -39,7 +48,7 @@ The vault's `vault.config.json` must have a `journal` episodic type, e.g.:
         "hooks": [
           {
             "type": "command",
-            "command": "FACT=$(your-fast-summarizer --transcript \"$CLAUDE_TRANSCRIPT_PATH\") && bun /path/to/vault/scripts/log-turn.ts \"$FACT\""
+            "command": "IN=$(cat); TRANSCRIPT=$(echo \"$IN\" | jq -r '.transcript_path'); FACT=$(your-fast-summarizer --transcript \"$TRANSCRIPT\"); [ -n \"$FACT\" ] && bun /path/to/vault/scripts/log-turn.ts \"$FACT\" || true"
           }
         ]
       }
@@ -66,7 +75,7 @@ that mutate infra):
         "hooks": [
           {
             "type": "command",
-            "command": "FACT=$(your-fast-summarizer --tool-output \"$CLAUDE_TOOL_OUTPUT\") && [ -n \"$FACT\" ] && bun /path/to/vault/scripts/log-turn.ts \"$FACT\" || true"
+            "command": "IN=$(cat); OUTPUT=$(echo \"$IN\" | jq -r '.tool_output // empty'); FACT=$(your-fast-summarizer --tool-output \"$OUTPUT\"); [ -n \"$FACT\" ] && bun /path/to/vault/scripts/log-turn.ts \"$FACT\" || true"
           }
         ]
       }

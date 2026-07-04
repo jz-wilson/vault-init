@@ -11,10 +11,10 @@ const SRC = import.meta.dir; // package/src — holds the operational .ts to ven
 const PKG = resolve(SRC, ".."); // package root — holds templates/
 const TEMPLATES = join(PKG, "templates");
 
-const OPERATIONAL = [
+export const OPERATIONAL = [
   "frontmatter.ts", "config.ts", "validate-logs.ts", "validate-vault.ts",
   "capture.ts", "consolidate.ts", "dashboard.ts",
-  "index.ts", "snapshot.ts", "search.ts", "nightly.ts", "log-turn.ts",
+  "index.ts", "snapshot.ts", "search.ts", "nightly.ts", "log-turn.ts", "link.ts",
 ];
 
 interface Item { value: string; dir: string; bucket: "semantic" | "episodic" | "extra"; label: string; selected: boolean; }
@@ -109,14 +109,49 @@ async function interactive() {
   }
   const nightly = await p.confirm({ message: "Schedule nightly maintenance on this machine (systemd/cron)?", initialValue: true });
   if (!p.isCancel(nightly) && nightly) p.note(setupNightly(target, name as string), "nightly");
+  p.note(ensureVaultDirEnv(target).msg, "env");
 
-  p.outro(`Done. Read SEED-PROMPT.md to populate it with an AI.`);
+  p.outro(`Done. Read SEED-PROMPT.md to populate it with an AI. Run 'bun run link' in the vault to register it with Claude Code machine-wide.`);
 
   const switchNow = await p.confirm({ message: `Switch to ${dir} now?`, initialValue: true });
   if (!p.isCancel(switchNow) && switchNow) {
     console.log(`(dropping into a shell in ${target} — exit to return)`);
     Bun.spawnSync([process.env.SHELL || "bash"], { cwd: target, stdio: ["inherit", "inherit", "inherit"] });
   }
+}
+
+/** $VAULT_DIR is the machine-wide default vault for every vault-init command (--dir overrides).
+ *  If unset, persist an export into the user's shell profile so future shells have it.
+ *  TTY-gated: non-interactive callers (tests, CI, scripts — piped stdout) never touch the real
+ *  profile; they get the export line to apply manually. `interactive` is injectable for tests. */
+export function ensureVaultDirEnv(
+  target: string,
+  dryRun = false,
+  interactive: boolean = !!process.stdout.isTTY,
+): { msg: string; changed: boolean } {
+  if (process.env.VAULT_DIR)
+    return { msg: `$VAULT_DIR already set (${process.env.VAULT_DIR})`, changed: false };
+  if (!interactive)
+    return { msg: `non-interactive shell — add 'export VAULT_DIR="${resolve(target)}"' to your shell profile to set the default vault`, changed: false };
+  const shell = (process.env.SHELL ?? "").split("/").pop();
+  // $HOME first: Bun's homedir() ignores env mutation, which breaks HOME-redirected callers (tests)
+  const profile = join(process.env.HOME ?? homedir(), shell === "zsh" ? ".zshrc" : shell === "bash" ? ".bashrc" : ".profile");
+  const line = `export VAULT_DIR="${resolve(target)}"`;
+  if (existsSync(profile) && readFileSync(profile, "utf8").includes("VAULT_DIR="))
+    return { msg: `$VAULT_DIR export already in ${profile} — restart your shell to pick it up`, changed: false };
+  if (!dryRun) writeFileSync(profile, `${existsSync(profile) ? readFileSync(profile, "utf8") : ""}\n# vault-init default vault\n${line}\n`);
+  return { msg: `${dryRun ? "would append" : "appended"} '${line}' to ${profile} — restart your shell (or run it now)`, changed: true };
+}
+
+/** .mcp.json registers this vault with the vault-init MCP server, pinned to the installed
+ *  package version so `bunx vault-init@<version> mcp` matches what scaffolded it. */
+export function writeMcpJson(target: string): void {
+  const { version } = JSON.parse(readFileSync(join(PKG, "package.json"), "utf8"));
+  writeFileSync(join(target, ".mcp.json"), JSON.stringify({
+    mcpServers: {
+      vault: { command: "bunx", args: [`vault-init@${version}`, "mcp", "--dir", resolve(target)] },
+    },
+  }, null, 2) + "\n");
 }
 
 function scaffold(target: string, config: ReturnType<typeof buildConfig>, examples: boolean, force = false) {
@@ -147,6 +182,7 @@ function scaffold(target: string, config: ReturnType<typeof buildConfig>, exampl
       search: "bun scripts/search.ts",
       nightly: "bun scripts/nightly.ts",
       "log-turn": "bun scripts/log-turn.ts",
+      link: "bun scripts/link.ts",
     },
   }, null, 2) + "\n");
 
@@ -161,9 +197,12 @@ function scaffold(target: string, config: ReturnType<typeof buildConfig>, exampl
   // hook-wiring docs ship next to the scripts they wire; scripts/ is validator-skipped
   for (const h of ["session-start-snapshot.md", "log-turn-hook.md", "nightly-automation.md"])
     copyTpl(join(TEMPLATES, "hooks", h), join(target, "scripts", "hooks", h));
-  for (const doc of ["_format.md", "AGENTS.md", "README.md", "IDENTITY.md", "ALWAYS.md", "NEVER.md"]) copyTpl(join(TEMPLATES, "docs", doc), join(target, doc));
+  for (const doc of ["_format.md", "AGENTS.md", "README.md", "IDENTITY.md", "ALWAYS.md", "NEVER.md", "CLAUDE.md"]) copyTpl(join(TEMPLATES, "docs", doc), join(target, doc));
   copyTpl(join(TEMPLATES, "SEED-PROMPT.md"), join(target, "SEED-PROMPT.md"));
+  copyTpl(join(TEMPLATES, "claude", "settings.json"), join(target, ".claude", "settings.json"));
   writeFileSync(join(target, ".gitignore"), "handoffs/\ndashboard/status.txt\n.nightly.log\n");
+
+  writeMcpJson(target);
 
   if (examples) writeExamples(target, config);
 
@@ -247,6 +286,28 @@ async function main() {
       await runMcp(argv.slice(1));
     } catch (e: any) {
       console.error(`error: ${e.message}`);
+      console.error(`  fix: bunx vault-init doctor --dir <vault> diagnoses and repairs vault setup`);
+      process.exit(1);
+    }
+    return;
+  }
+  if (argv[0] === "link") {
+    try {
+      const { runLink } = await import("./link.ts");
+      runLink(argv.slice(1));
+    } catch (e: any) {
+      console.error(`error: ${e.message}`);
+      console.error(`  fix: bunx vault-init doctor --dir <vault> diagnoses and repairs vault setup`);
+      process.exit(1);
+    }
+    return;
+  }
+  if (argv[0] === "doctor") {
+    try {
+      const { runDoctor } = await import("./doctor.ts");
+      runDoctor(argv.slice(1));
+    } catch (e: any) {
+      console.error(`error: ${e.message}`);
       process.exit(1);
     }
     return;
@@ -269,6 +330,8 @@ async function main() {
   if (f.nightly) console.log(`  nightly: ${setupNightly(target, name)}`);
   else console.log(`  nightly: pass --nightly to schedule scripts/nightly.sh on this machine`);
   console.log(`  next: cd ${target} && bun run dashboard`);
+  console.log(`  global: bun run link — register this vault with Claude Code machine-wide (MCP + session hook)`);
+  console.log(`  env: ${ensureVaultDirEnv(target).msg}`);
 }
 
-runMain(main);
+if (import.meta.main) runMain(main); // guarded so doctor.ts can import OPERATIONAL/writeMcpJson

@@ -14,6 +14,7 @@ Any new CLI flag or config field that reaches a filesystem path MUST use one of 
 | `assertPlainFilename()` | `src/nightly.ts:33` | same reject-list | `nightly.ts process <file>` |
 | `loadPreset()` name check | `src/init.ts:24` | same reject-list | `--preset` values |
 | `resolveVaultDir()` | `src/mcp.ts:21` | resolve + vault.config.json existence | MCP `--dir` trust boundary |
+| `runReadTool()` | `src/mcp.ts` | `resolveInside` + `.md`-only + existence | MCP `vault_read` path param (LLM-supplied) |
 
 `path.join` does **not** block `..` — that is why every user-supplied fragment routes through
 one of the guards above before touching the filesystem.

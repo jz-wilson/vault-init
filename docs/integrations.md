@@ -22,9 +22,11 @@ live in `<vault>/scripts/`.
 
 ## External integrations
 
-- **git** — the only external system, invoked exclusively via `Bun.spawnSync`: init/commit (scaffold), `git mv` + commit (nightly, consolidate), `git push` (nightly `--push` only). Failures surface as thrown errors with stderr text.
+- **claude CLI** — `link.ts` shells out `claude mcp add --scope user` (`Bun.spawnSync`) for machine-wide MCP registration; missing/failed CLI degrades to printed manual instructions, and the settings.json/CLAUDE.md merges (`CLAUDE_CONFIG_DIR` ?? `~/.claude`) proceed regardless.
+- **git** — invoked exclusively via `Bun.spawnSync`: init/commit (scaffold), `git mv` + commit (nightly, consolidate), `git push` (nightly `--push` only). Failures surface as thrown errors with stderr text.
 - **systemd / cron** — probed at scaffold time by `setupNightly()` (`src/init.ts:195`): `systemctl --user show-environment` exit 0 → write `~/.config/systemd/user/vault-nightly-<name>.{service,timer}` (OnCalendar daily 09:00, Persistent) + enable; else `crontab -l` exit ≤1 → append `0 9 * * * <runner> >> <vault>/.nightly.log 2>&1` (idempotent — skips if the runner path already present); else print manual instructions.
-- **MCP clients** (Claude Code etc.) — via stdio transport; registration snippet in `templates/mcp/mcp.json`.
+- **MCP clients** (Claude Code etc.) — via stdio transport; `scaffold()` writes a ready `.mcp.json` at the vault root (pinned `vault-init@<version>`, absolute `--dir`); generic snippet remains in `templates/mcp/mcp.json` for registering from other projects/clients. The server refuses to start for an unlinked vault (error points at `vault-init doctor`).
+- **shell profile** — `ensureVaultDirEnv()` (`src/init.ts`, used by scaffold + `doctor --fix`) appends `export VAULT_DIR="<vault>"` to `~/.zshrc`/`~/.bashrc`/`~/.profile` ($SHELL-derived) when `$VAULT_DIR` is unset; idempotent (skips if the profile already mentions `VAULT_DIR=`) and TTY-gated (non-interactive callers get the export line printed, nothing written). `$VAULT_DIR` is the machine-wide default `--dir` for `mcp`/`link`/`doctor`.
 - **Obsidian** — passive compatibility only: `[[wiki-link]]` resolution in `checkLinks()` mimics Obsidian semantics (bare `[[foo]]` matches any basename anywhere, path-qualified must match exactly, case-insensitive), and `.obsidian/` is in `NONCONTENT_SUBTREES`.
 
 ## Scaffolded-vault contract (what a generated vault expects)

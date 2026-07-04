@@ -44,14 +44,15 @@ function splitSections(content: string): string[] {
  * Build a token-capped digest from files in priority order.
  *
  * Walks files in the given order; for each file, walks its `##` sections in order, including
- * whole sections while they fit the remaining budget. The first section that would exceed the
- * remaining budget is dropped entirely, and processing stops there — no later section, in this
- * file or any later file, is considered. This gives a predictable, priority-order cutoff rather
- * than a best-fit packing. Sections are never truncated mid-sentence.
+ * whole sections while they fit the remaining budget. A section that would exceed the remaining
+ * budget is skipped — not the file, not the rest of the walk — so a later, smaller section (in
+ * this file or a later file) still gets a chance to fit. This gives greedy-skip packing rather
+ * than a stop-everything cutoff. Sections are never truncated mid-sentence.
  *
  * Each included file's content is prefixed with a `# <basename>` marker line so the digest stays
  * navigable; that marker's token cost is charged against the budget alongside the file's first
- * included section (a file that can't fit even its marker + first section contributes nothing).
+ * *included* section (a file where no section ends up fitting contributes nothing — no dangling
+ * header for an empty file).
  */
 export function buildSnapshot(files: { path: string; content: string }[], budgetTokens: number): string {
   let remaining = budgetTokens;
@@ -66,21 +67,16 @@ export function buildSnapshot(files: { path: string; content: string }[], budget
     const marker = `# ${basename(file.path)}`;
     const included: string[] = [];
     let markerCharged = false;
-    let stopped = false;
 
     for (const section of sections) {
       const cost = approxTokens(section) + (markerCharged ? 0 : approxTokens(marker));
-      if (cost > remaining) {
-        stopped = true;
-        break;
-      }
+      if (cost > remaining) continue; // skip this section, keep looking for one that fits
       included.push(section);
       remaining -= cost;
       markerCharged = true;
     }
 
     if (included.length > 0) output.push(`${marker}\n\n${included.join("\n\n")}`);
-    if (stopped) break; // priority-order cutoff — do not consider later files
   }
 
   return output.join("\n\n");

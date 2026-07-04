@@ -22,7 +22,8 @@ tasks:
   scaffold:
     desc: Scaffold a throwaway vault under /tmp for manual testing
     cmds:
-      - bun src/init.ts --yes --dir {{.SMOKE_DIR}} --preset {{.PRESET | default "homelab"}} --force
+      # VAULT_DIR pinned so the throwaway scaffold never writes a /tmp export into the real shell profile
+      - VAULT_DIR={{.SMOKE_DIR}} bun src/init.ts --yes --dir {{.SMOKE_DIR}} --preset {{.PRESET | default "homelab"}} --force
 
   dashboard:
     desc: Run the dashboard against the smoke vault

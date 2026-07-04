@@ -51,6 +51,44 @@ test("buildSnapshot: priority order respected — later file's sections dropped 
   expect(out).not.toContain("b".repeat(200));
 });
 
+test("buildSnapshot: greedy-skip — an oversized middle section is skipped but a later, smaller section from a LATER file still fits", () => {
+  const fileA = {
+    path: "IDENTITY.md",
+    content: "# A\n\n## Big\n" + "a".repeat(300) + "\n\n## Small\nsmall-a\n",
+  };
+  const fileB = { path: "ALWAYS.md", content: "## Small\nsmall-b\n" };
+
+  // Budget: fits IDENTITY.md's marker + lead + "## Big", but not "## Big" too — so "## Big" is
+  // skipped while "## Small" (same file) and ALWAYS.md's section (later file) still fit.
+  const marker = "# IDENTITY.md";
+  const lead = "# A";
+  const smallSecA = "## Small\nsmall-a";
+  const smallSecB = "## Small\nsmall-b";
+  const markerB = "# ALWAYS.md";
+  const budget =
+    approxTokens(marker) + approxTokens(lead) + approxTokens(smallSecA) + approxTokens(markerB) + approxTokens(smallSecB) + 2;
+  const out = buildSnapshot([fileA, fileB], budget);
+
+  expect(out).not.toContain("a".repeat(300));
+  expect(out).toContain(smallSecA);
+  expect(out).toContain("# ALWAYS.md");
+  expect(out).toContain(smallSecB);
+});
+
+test("buildSnapshot: a file whose every section is skipped emits no header at all", () => {
+  const fileA = { path: "IDENTITY.md", content: "## Big\n" + "a".repeat(300) };
+  const fileB = { path: "ALWAYS.md", content: "## Small\nfits\n" };
+
+  // Budget too small for fileA's only section (even without its marker), but fits fileB in full.
+  const budget = approxTokens("# ALWAYS.md") + approxTokens("## Small\nfits") + 2;
+  const out = buildSnapshot([fileA, fileB], budget);
+
+  expect(out).not.toContain("# IDENTITY.md");
+  expect(out).not.toContain("a".repeat(300));
+  expect(out).toContain("# ALWAYS.md");
+  expect(out).toContain("## Small\nfits");
+});
+
 test("buildSnapshot: tiny budget drops everything rather than emit a partial fragment", () => {
   const files = [{ path: "IDENTITY.md", content: "# Identity\n\n## Who\nSomething moderately long here.\n" }];
   const out = buildSnapshot(files, 1);

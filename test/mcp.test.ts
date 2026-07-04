@@ -2,7 +2,8 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { resolveVaultDir, runSearchTool, runSnapshotTool } from "../src/mcp.ts";
+import { resolveVaultDir, runSearchTool, runSnapshotTool, runReadTool } from "../src/mcp.ts";
+import { applyGlobalConfig } from "../src/link.ts";
 import { loadConfig } from "../src/config.ts";
 import { search, loadNotesFromVault } from "../src/search.ts";
 import { buildSnapshot, loadSnapshotFiles, DEFAULT_SNAPSHOT } from "../src/snapshot.ts";
@@ -26,6 +27,13 @@ function setupVault(): string {
   writeFileSync(join(dir, "IDENTITY.md"), "## Who\nThe Architect.\n");
   writeFileSync(join(dir, "ALWAYS.md"), "## Rule\nGrep the vault first.\n");
   return dir;
+}
+
+/** Scratch CLAUDE_CONFIG_DIR with the vault linked — runMcp's setup gate requires it. */
+function linkedCfgDir(vaultDir: string): string {
+  const cfg = mkdtempSync(join(tmpdir(), "mcp-cfg-"));
+  applyGlobalConfig(cfg, vaultDir, "t", false);
+  return cfg;
 }
 
 // ---- handler === backing fn (thin-adapter invariant) ----
@@ -69,6 +77,36 @@ test("runSnapshotTool honors a budgetTokens override", () => {
   expect(actual.budgetTokens).toBe(5);
 });
 
+test("runSnapshotTool clamps an oversized budgetTokens override to the 8000 cap", () => {
+  const dir = setupVault();
+  const cfg = loadConfig(dir);
+  const actual = runSnapshotTool(dir, cfg, { budgetTokens: 999999999 });
+  expect(actual.budgetTokens).toBeLessThanOrEqual(8000);
+});
+
+// ---- runReadTool ----
+
+test("runReadTool returns a note's full text", () => {
+  const dir = setupVault();
+  const actual = runReadTool(dir, { path: "alpha.md" });
+  expect(actual).toContain("kubernetes cluster upgrade notes");
+});
+
+test("runReadTool rejects a path that escapes the vault root", () => {
+  const dir = setupVault();
+  expect(() => runReadTool(dir, { path: "../x.md" })).toThrow("escapes the vault root");
+});
+
+test("runReadTool rejects a non-.md path", () => {
+  const dir = setupVault();
+  expect(() => runReadTool(dir, { path: "vault.config.json" })).toThrow("is not a .md file");
+});
+
+test("runReadTool throws a clear error when the note doesn't exist", () => {
+  const dir = setupVault();
+  expect(() => runReadTool(dir, { path: "nope.md" })).toThrow("does not exist");
+});
+
 // ---- resolveVaultDir: --dir trust boundary ----
 
 test("resolveVaultDir returns the resolved dir when vault.config.json exists", () => {
@@ -76,8 +114,26 @@ test("resolveVaultDir returns the resolved dir when vault.config.json exists", (
   expect(resolveVaultDir(["--dir", dir])).toBe(dir);
 });
 
-test("resolveVaultDir throws when --dir is missing", () => {
-  expect(() => resolveVaultDir([])).toThrow("--dir <vault> is required");
+test("resolveVaultDir throws when --dir is missing and $VAULT_DIR unset", () => {
+  const saved = process.env.VAULT_DIR;
+  delete process.env.VAULT_DIR;
+  try {
+    expect(() => resolveVaultDir([])).toThrow("--dir <vault> is required");
+  } finally {
+    if (saved !== undefined) process.env.VAULT_DIR = saved;
+  }
+});
+
+test("resolveVaultDir falls back to $VAULT_DIR when --dir is missing", () => {
+  const dir = setupVault();
+  const saved = process.env.VAULT_DIR;
+  process.env.VAULT_DIR = dir;
+  try {
+    expect(resolveVaultDir([])).toBe(dir);
+  } finally {
+    if (saved !== undefined) process.env.VAULT_DIR = saved;
+    else delete process.env.VAULT_DIR;
+  }
 });
 
 test("resolveVaultDir throws when the dir has no vault.config.json", () => {
@@ -128,6 +184,7 @@ test("stdio: tools/list + tools/call for both tools over `bun src/init.ts mcp --
   const proc = Bun.spawn({
     cmd: ["bun", "src/init.ts", "mcp", "--dir", dir],
     cwd: join(import.meta.dir, ".."),
+    env: { ...process.env, CLAUDE_CONFIG_DIR: linkedCfgDir(dir) },
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
@@ -163,4 +220,22 @@ test("stdio: tools/list + tools/call for both tools over `bun src/init.ts mcp --
   expect(snap.files).toEqual(["IDENTITY.md", "ALWAYS.md"]);
   expect(typeof snap.snapshot).toBe("string");
   expect(snap.budgetTokens).toBeGreaterThan(0);
+}, 15000);
+
+// ---- setup gate: server refuses to start for an unlinked vault ----
+
+test("mcp exits with a doctor hint when the vault is not linked", async () => {
+  const dir = setupVault();
+  const emptyCfg = mkdtempSync(join(tmpdir(), "mcp-cfg-unlinked-"));
+  const proc = Bun.spawn({
+    cmd: ["bun", "src/init.ts", "mcp", "--dir", dir],
+    cwd: join(import.meta.dir, ".."),
+    env: { ...process.env, CLAUDE_CONFIG_DIR: emptyCfg },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [code, err] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
+  expect(code).toBe(1);
+  expect(err).toContain("not linked");
+  expect(err).toContain("vault-init doctor");
 }, 15000);
