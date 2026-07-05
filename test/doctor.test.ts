@@ -64,6 +64,15 @@ test("doctor --fix is a no-op on a healthy vault", () => {
   expect(out).toContain("$VAULT_DIR points at this vault");
 });
 
+test("missing .mcp.json is fine on a linked vault (user-scope registration covers it)", () => {
+  rmSync(join(dir, ".mcp.json"));
+  const { code, out } = doctor();
+  expect(code).toBe(0);
+  expect(out).toContain(".mcp.json absent — fine, vault is linked user-scope");
+  expect(out).toContain("0 fixable");
+  expect(existsSync(join(dir, ".mcp.json"))).toBe(false); // report mode + linked: never rewritten
+});
+
 test("doctor refuses a non-vault dir with a clear error", () => {
   const r = Bun.spawnSync(["bun", "src/init.ts", "doctor", "--dir", "/tmp/definitely-not-a-vault-xyz"], { cwd: repo });
   expect(r.exitCode).toBe(1);

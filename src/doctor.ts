@@ -60,9 +60,15 @@ export function runDoctor(argv: string[]): void {
     if (!dryRun) { mkdirSync(dirname(dest), { recursive: true }); copyFileSync(src, dest); }
     fix(`restored ${dest.slice(vaultRoot.length + 1)}`);
   }
+  const linked = isLinked(claudeConfigDir(), vaultRoot);
   if (!existsSync(join(vaultRoot, ".mcp.json"))) {
-    if (!dryRun) writeMcpJson(vaultRoot);
-    fix("wrote .mcp.json (pinned MCP registration)");
+    // linked vaults have a user-scope MCP registration — a project-scope .mcp.json is redundant,
+    // so a deliberately removed one isn't a defect
+    if (linked) ok(".mcp.json absent — fine, vault is linked user-scope");
+    else {
+      if (!dryRun) writeMcpJson(vaultRoot);
+      fix("wrote .mcp.json (pinned MCP registration)");
+    }
   }
   ok("Claude Code integration files checked (CLAUDE.md, .claude/settings.json, .mcp.json)");
 
@@ -88,7 +94,7 @@ export function runDoctor(argv: string[]): void {
   else ok("$VAULT_DIR points at this vault");
 
   // machine-wide link — the piece mcp refuses to start without
-  if (isLinked(claudeConfigDir(), vaultRoot)) ok("linked machine-wide (global SessionStart hook present)");
+  if (linked) ok("linked machine-wide (global SessionStart hook present)");
   else {
     fix("linking machine-wide (global hook + CLAUDE.md pointer + MCP registration)");
     runLink(["--dir", vaultRoot, ...(dryRun ? ["--dry-run"] : []), ...(argv.includes("--skip-mcp") ? ["--skip-mcp"] : [])]);
