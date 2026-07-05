@@ -1,7 +1,7 @@
 # Architecture
 
 System overview, stack, directory topography, and core flows. Grounded in the literal
-implementation as of v0.4.2. Siblings: [integrations.md](integrations.md) ·
+implementation as of v0.4.3. Siblings: [integrations.md](integrations.md) ·
 [security.md](security.md) · [operations.md](operations.md) · [sharp-edges.md](sharp-edges.md).
 
 ## 1. System Overview & Core Purpose
@@ -25,7 +25,7 @@ implementation as of v0.4.2. Siblings: [integrations.md](integrations.md) ·
 - **Key External Dependencies (only 2 runtime deps, by design):**
   - `@clack/prompts ^0.7.0` — interactive scaffold wizard (`interactive()` in `src/init.ts:62`). Lazy-imported (`await import`) so `--yes` non-interactive runs never load it.
   - `@modelcontextprotocol/sdk ^1.29.0` — MCP stdio server (`src/mcp.ts`). Lazy-imported by the `mcp` subcommand only.
-- **Published surface:** npm `vault-init` (v0.4.2), GitHub `jz-wilson/vault-init`. `files: ["src", "templates"]` — tests and Taskfile are not shipped.
+- **Published surface:** npm `vault-init` (v0.4.3), GitHub `jz-wilson/vault-init`. `files: ["src", "templates"]` — tests and Taskfile are not shipped.
 
 ## 3. Directory Topography
 
