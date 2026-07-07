@@ -12,6 +12,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 import { runMain } from "./config.ts";
 
 function snapshotCommand(vaultRoot: string): string {
@@ -96,6 +97,12 @@ export function upsertPointerBlock(md: string, name: string, body: string): { md
   return { md: md + sep + block, changed: true };
 }
 
+/** Pointer-block marker key: name alone collides when two vaults share a slugified name
+ *  (e.g. both default-named "vault") — suffix a short stable hash of the vault's path. */
+export function vaultKey(name: string, vaultRoot: string): string {
+  return `${name}-${createHash("sha1").update(vaultRoot).digest("hex").slice(0, 8)}`;
+}
+
 function pointerBody(name: string, vaultRoot: string): string {
   return `## Vault: ${name}
 Persistent memory vault at \`${vaultRoot}\` (MCP server \`${name}\`, available in every project).
@@ -128,8 +135,24 @@ export function applyGlobalConfig(cfgDir: string, vaultRoot: string, name: strin
 
   const mdPath = join(cfgDir, "CLAUDE.md");
   const md = existsSync(mdPath) ? readFileSync(mdPath, "utf8") : "";
-  const mdRes = upsertPointerBlock(md, name, pointerBody(name, vaultRoot));
-  if (mdRes.changed) {
+  // migrate a pre-hash-key block for THIS vault only — leave any other vault's
+  // legacy (un-hashed, possibly name-colliding) block alone
+  const legacyBegin = `<!-- vault-init:link:${name} -->`;
+  const legacyEnd = `<!-- /vault-init:link:${name} -->`;
+  let strippedMd = md;
+  const li = md.indexOf(legacyBegin);
+  if (li >= 0) {
+    const lj = md.indexOf(legacyEnd, li);
+    if (lj >= 0) {
+      const legacyBlock = md.slice(li, lj + legacyEnd.length + 1);
+      if (legacyBlock.includes(`\`${vaultRoot}\``)) {
+        strippedMd = md.slice(0, li) + md.slice(lj + legacyEnd.length + 1);
+      }
+    }
+  }
+  const mdRes = upsertPointerBlock(strippedMd, vaultKey(name, vaultRoot), pointerBody(name, vaultRoot));
+  const mdChanged = mdRes.changed || strippedMd !== md;
+  if (mdChanged) {
     if (!dryRun) {
       mkdirSync(cfgDir, { recursive: true });
       writeFileSync(mdPath, mdRes.md);

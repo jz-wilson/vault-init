@@ -1,10 +1,10 @@
 // link.ts contract: global Claude Code wiring is an idempotent merge — existing user
 // settings/CLAUDE.md content is preserved, repeat runs change nothing.
 import { test, expect, afterAll } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { mergeSessionStartHook, upsertPointerBlock, applyGlobalConfig, hasSnapshotHook, isLinked, isPrimaryVault } from "../src/link.ts";
+import { mergeSessionStartHook, upsertPointerBlock, applyGlobalConfig, hasSnapshotHook, isLinked, isPrimaryVault, vaultKey } from "../src/link.ts";
 
 const base = join(tmpdir(), `vault-init-link-test-${process.pid}`);
 afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -81,4 +81,48 @@ test("applyGlobalConfig dry-run touches nothing", () => {
   const log = applyGlobalConfig(cfgDir, join(base, "vault"), "work", true);
   expect(existsSync(cfgDir)).toBe(false);
   expect(log.join("\n")).toContain("would add");
+});
+
+test("applyGlobalConfig: two vaults sharing a name don't clobber each other's pointer block", () => {
+  const cfgDir = join(base, "collision-cfg");
+  const vaultA = join(base, "collision-vault-a");
+  const vaultB = join(base, "collision-vault-b");
+  mkdirSync(vaultA, { recursive: true });
+  mkdirSync(vaultB, { recursive: true });
+  applyGlobalConfig(cfgDir, vaultA, "work", false);
+  applyGlobalConfig(cfgDir, vaultB, "work", false);
+  const md = readFileSync(join(cfgDir, "CLAUDE.md"), "utf8");
+  expect(md).toContain(vaultA);
+  expect(md).toContain(vaultB);
+  expect(md.match(/## Vault: work/g)?.length).toBe(2);
+  expect(md).toContain(`<!-- vault-init:link:${vaultKey("work", vaultA)} -->`);
+  expect(md).toContain(`<!-- vault-init:link:${vaultKey("work", vaultB)} -->`);
+});
+
+test("applyGlobalConfig: migrates a legacy un-hashed block to the keyed format without duplicating or touching other vaults' legacy blocks", () => {
+  const cfgDir = join(base, "migrate-cfg");
+  const vault = join(base, "migrate-vault");
+  const otherVault = join(base, "migrate-other-vault");
+  mkdirSync(cfgDir, { recursive: true });
+  mkdirSync(vault, { recursive: true });
+  const legacy = upsertPointerBlock(
+    upsertPointerBlock("# rules\n", "biz", `## Vault: biz\nlegacy body \`${otherVault}\``).md,
+    "biz",
+    `## Vault: biz\nlegacy body \`${vault}\``,
+  );
+  // simulate: this vault's legacy block was overwritten by a same-named other vault's legacy
+  // link (the exact collision bug) — leave the surviving legacy block pointing at `vault`
+  const mdPath = join(cfgDir, "CLAUDE.md");
+  writeFileSync(mdPath, legacy.md);
+
+  const log = applyGlobalConfig(cfgDir, vault, "biz", false);
+  const md = readFileSync(mdPath, "utf8");
+  expect(md).not.toContain("<!-- vault-init:link:biz -->"); // legacy marker gone
+  expect(md).not.toContain("legacy body"); // stale legacy content removed, not just re-keyed alongside
+  expect(md.match(/## Vault: biz/g)?.length).toBe(1); // not duplicated
+  expect(md).toContain(`<!-- vault-init:link:${vaultKey("biz", vault)} -->`);
+  expect(log.join("\n")).toContain("upserted"); // migration counted as a change
+
+  const second = applyGlobalConfig(cfgDir, vault, "biz", false); // idempotent after migration
+  expect(second.join("\n")).toContain("already current");
 });
