@@ -11,7 +11,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { runMain } from "./config.ts";
 import { OPERATIONAL, ensureVaultDirEnv, writeMcpJson } from "./init.ts";
-import { claudeConfigDir, isLinked, runLink } from "./link.ts";
+import { applyGlobalConfig, claudeConfigDir, hasSnapshotHook, isLinked, isPrimaryVault, runLink } from "./link.ts";
 
 const SRC = import.meta.dir;
 const TEMPLATES = join(SRC, "..", "templates");
@@ -94,10 +94,24 @@ export function runDoctor(argv: string[]): void {
   else ok("$VAULT_DIR points at this vault");
 
   // machine-wide link — the piece mcp refuses to start without
-  if (linked) ok("linked machine-wide (global SessionStart hook present)");
+  const primary = isPrimaryVault(vaultRoot);
+  if (linked) ok(`linked machine-wide (${primary ? "primary vault" : "on-demand — snapshot injects only for the primary vault"})`);
   else {
-    fix("linking machine-wide (global hook + CLAUDE.md pointer + MCP registration)");
+    fix("linking machine-wide (CLAUDE.md pointer + MCP registration + snapshot hook if primary)");
     runLink(["--dir", vaultRoot, ...(dryRun ? ["--dry-run"] : []), ...(argv.includes("--skip-mcp") ? ["--skip-mcp"] : [])]);
+  }
+
+  // snapshot hook must match primary status (runLink handles it for freshly-linked vaults)
+  if (linked) {
+    const hook = hasSnapshotHook(claudeConfigDir(), vaultRoot);
+    if (primary && !hook) {
+      fix("adding SessionStart snapshot hook (this is the primary vault)");
+      if (!dryRun) {
+        const name = String(config.name ?? "vault").toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+        for (const line of applyGlobalConfig(claudeConfigDir(), vaultRoot, name, false, true)) console.log(line);
+      }
+    } else if (!primary && hook)
+      warn(`SessionStart snapshot hook injects for this non-primary vault ($VAULT_DIR=${process.env.VAULT_DIR}) — remove it from ~/.claude/settings.json or re-point $VAULT_DIR`);
   }
 
   console.log(`doctor: ${fixed} ${dryRun ? "fixable" : "fixed"}, ${warned} warning${warned === 1 ? "" : "s"}${dryRun && fixed > 0 ? " — run again with --fix to apply" : ""}`);

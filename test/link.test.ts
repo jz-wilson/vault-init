@@ -4,7 +4,7 @@ import { test, expect, afterAll } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { mergeSessionStartHook, upsertPointerBlock, applyGlobalConfig } from "../src/link.ts";
+import { mergeSessionStartHook, upsertPointerBlock, applyGlobalConfig, hasSnapshotHook, isLinked, isPrimaryVault } from "../src/link.ts";
 
 const base = join(tmpdir(), `vault-init-link-test-${process.pid}`);
 afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -48,6 +48,32 @@ test("applyGlobalConfig writes settings.json + CLAUDE.md into cfgDir and is idem
   const log = applyGlobalConfig(cfgDir, vault, "work", false); // second run: no-op
   expect(log.join("\n")).toContain("already present");
   expect(log.join("\n")).toContain("already current");
+});
+
+test("isPrimaryVault: unset VAULT_DIR = primary, match = primary, mismatch = not", () => {
+  const prev = process.env.VAULT_DIR;
+  try {
+    delete process.env.VAULT_DIR;
+    expect(isPrimaryVault("/v/a")).toBe(true);
+    process.env.VAULT_DIR = "/v/a";
+    expect(isPrimaryVault("/v/a")).toBe(true);
+    process.env.VAULT_DIR = "/v/b";
+    expect(isPrimaryVault("/v/a")).toBe(false);
+  } finally {
+    if (prev === undefined) delete process.env.VAULT_DIR;
+    else process.env.VAULT_DIR = prev;
+  }
+});
+
+test("applyGlobalConfig non-primary: pointer written, snapshot hook skipped, still linked", () => {
+  const cfgDir = join(base, "nonprimary-cfg");
+  const vault = join(base, "vault2");
+  mkdirSync(vault, { recursive: true });
+  const log = applyGlobalConfig(cfgDir, vault, "biz", false, false);
+  expect(log.join("\n")).toContain("skipped SessionStart snapshot hook");
+  expect(existsSync(join(cfgDir, "settings.json"))).toBe(false); // hook surface never written
+  expect(hasSnapshotHook(cfgDir, vault)).toBe(false);
+  expect(isLinked(cfgDir, vault)).toBe(true); // CLAUDE.md pointer block alone counts as linked
 });
 
 test("applyGlobalConfig dry-run touches nothing", () => {

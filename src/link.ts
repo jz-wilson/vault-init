@@ -3,6 +3,8 @@
 // in any project directory, knows the vault exists. Three surfaces:
 //   1. user-scope MCP server (`claude mcp add --scope user`) — vault tools everywhere
 //   2. global SessionStart hook (~/.claude/settings.json) — identity snapshot injected every session
+//      (PRIMARY vault only — the one $VAULT_DIR points at; other linked vaults stay on-demand
+//      so one vault's identity never leaks into every session on a multi-vault machine)
 //   3. pointer block in ~/.claude/CLAUDE.md — tells the agent the vault path + how to use it
 // All writes are idempotent merges — existing user config is preserved, never clobbered.
 // Vendored:  bun scripts/link.ts [--dry-run]
@@ -16,18 +18,46 @@ function snapshotCommand(vaultRoot: string): string {
   return `bun ${join(vaultRoot, "scripts", "snapshot.ts")}`;
 }
 
-/** Is this vault linked machine-wide? True when the global SessionStart snapshot hook for it
- *  exists in cfgDir/settings.json — the load-bearing surface `link`/`doctor` write. */
-export function isLinked(cfgDir: string, vaultRoot: string): boolean {
+function settingsHasHook(settings: any, command: string): boolean {
+  for (const entry of settings.hooks?.SessionStart ?? [])
+    for (const h of entry.hooks ?? [])
+      if (h.command === command) return true;
+  return false;
+}
+
+/** Is the vault's SessionStart snapshot hook in cfgDir/settings.json? Primary-vault-only surface. */
+export function hasSnapshotHook(cfgDir: string, vaultRoot: string): boolean {
   const settingsPath = join(cfgDir, "settings.json");
   if (!existsSync(settingsPath)) return false;
   try {
-    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
-    for (const entry of settings.hooks?.SessionStart ?? [])
-      for (const h of entry.hooks ?? [])
-        if (h.command === snapshotCommand(vaultRoot)) return true;
+    return settingsHasHook(JSON.parse(readFileSync(settingsPath, "utf8")), snapshotCommand(vaultRoot));
   } catch {}
   return false;
+}
+
+/** Does any vault-init pointer block in cfgDir/CLAUDE.md reference this vault path? */
+function hasPointerBlock(cfgDir: string, vaultRoot: string): boolean {
+  const mdPath = join(cfgDir, "CLAUDE.md");
+  if (!existsSync(mdPath)) return false;
+  const md = readFileSync(mdPath, "utf8");
+  for (const m of md.matchAll(/<!-- vault-init:link:([a-z0-9_-]+) -->/g)) {
+    const end = md.indexOf(`<!-- /vault-init:link:${m[1]} -->`, m.index);
+    if (end >= 0 && md.slice(m.index, end).includes(`\`${vaultRoot}\``)) return true;
+  }
+  return false;
+}
+
+/** Is this vault linked machine-wide? Snapshot hook (primary vault) or CLAUDE.md pointer
+ *  block (any linked vault) — either surface counts; `mcp`/`doctor` gate on this. */
+export function isLinked(cfgDir: string, vaultRoot: string): boolean {
+  return hasSnapshotHook(cfgDir, vaultRoot) || hasPointerBlock(cfgDir, vaultRoot);
+}
+
+/** The primary vault is the one $VAULT_DIR points at; only its snapshot injects at
+ *  SessionStart. Unset $VAULT_DIR = single-vault machine, treat as primary. */
+export function isPrimaryVault(vaultRoot: string): boolean {
+  const vd = process.env.VAULT_DIR;
+  return !vd || resolve(vd) === vaultRoot;
 }
 
 /** Default Claude Code config dir — link/doctor/mcp all resolve it identically. */
@@ -74,20 +104,27 @@ Persistent memory vault at \`${vaultRoot}\` (MCP server \`${name}\`, available i
 }
 
 /** Merge the global SessionStart hook + CLAUDE.md pointer into cfgDir. Returns human-readable change log. */
-export function applyGlobalConfig(cfgDir: string, vaultRoot: string, name: string, dryRun: boolean): string[] {
+export function applyGlobalConfig(cfgDir: string, vaultRoot: string, name: string, dryRun: boolean, primary = true): string[] {
   const log: string[] = [];
   const snapshotCmd = snapshotCommand(vaultRoot);
 
   const settingsPath = join(cfgDir, "settings.json");
   const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, "utf8")) : {};
-  const hookRes = mergeSessionStartHook(settings, snapshotCmd);
-  if (hookRes.changed) {
-    if (!dryRun) {
-      mkdirSync(cfgDir, { recursive: true });
-      writeFileSync(settingsPath, JSON.stringify(hookRes.settings, null, 2) + "\n");
-    }
-    log.push(`${dryRun ? "would add" : "added"} SessionStart snapshot hook → ${settingsPath}`);
-  } else log.push(`SessionStart hook already present in ${settingsPath}`);
+  if (primary) {
+    const hookRes = mergeSessionStartHook(settings, snapshotCmd);
+    if (hookRes.changed) {
+      if (!dryRun) {
+        mkdirSync(cfgDir, { recursive: true });
+        writeFileSync(settingsPath, JSON.stringify(hookRes.settings, null, 2) + "\n");
+      }
+      log.push(`${dryRun ? "would add" : "added"} SessionStart snapshot hook → ${settingsPath}`);
+    } else log.push(`SessionStart hook already present in ${settingsPath}`);
+  } else {
+    // non-primary vaults stay on-demand: MCP + pointer only, no per-session snapshot injection
+    log.push(settingsHasHook(settings, snapshotCmd)
+      ? `SessionStart hook present for non-primary vault — 'doctor' flags this; remove it or re-point $VAULT_DIR`
+      : `skipped SessionStart snapshot hook — snapshot injects only for the primary ($VAULT_DIR) vault`);
+  }
 
   const mdPath = join(cfgDir, "CLAUDE.md");
   const md = existsSync(mdPath) ? readFileSync(mdPath, "utf8") : "";
@@ -144,9 +181,13 @@ export function runLink(argv: string[]): void {
   const name = String(rawName).toLowerCase().replace(/[^a-z0-9_-]/g, "-");
   const cfgDir = claudeConfigDir();
 
-  for (const line of applyGlobalConfig(cfgDir, vaultRoot, name, dryRun)) console.log(line);
+  const primary = isPrimaryVault(vaultRoot);
+  for (const line of applyGlobalConfig(cfgDir, vaultRoot, name, dryRun, primary)) console.log(line);
   if (!skipMcp) console.log(registerMcp(vaultRoot, name, dryRun));
-  console.log(`vault '${name}' is ${dryRun ? "ready to be " : ""}linked machine-wide — new Claude Code sessions anywhere will see it.`);
+  if (primary)
+    console.log(`vault '${name}' is ${dryRun ? "ready to be " : ""}linked machine-wide — new Claude Code sessions anywhere will see it.`);
+  else
+    console.log(`vault '${name}' is ${dryRun ? "ready to be " : ""}linked on-demand (MCP + CLAUDE.md pointer) — to make it the primary vault: export VAULT_DIR=${vaultRoot} and rerun link.`);
 }
 
 if (import.meta.main) runMain(() => runLink(process.argv.slice(2)));
