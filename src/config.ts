@@ -20,6 +20,7 @@ export interface VaultConfig {
   extra_dirs: string[]; // freeform spokes, not type-bound
   index_style?: Record<string, string>; // dir name -> rendering style, e.g. "alphabetical"
   snapshot?: SnapshotConfig; // pre-read file set + token budget for agent context priming
+  okf_compat?: boolean; // OKF-permissive validation: unknown types + broken links warn, don't fail
 }
 
 export interface Derived {
@@ -95,6 +96,7 @@ export function loadConfig(vaultRoot: string): VaultConfig {
   const cfg: VaultConfig = { name: raw.name ?? "vault", semantic_dirs, episodic_dirs, extra_dirs };
   if (index_style) cfg.index_style = index_style;
   if (snapshot) cfg.snapshot = snapshot;
+  if (raw.okf_compat === true) cfg.okf_compat = true;
   return cfg;
 }
 

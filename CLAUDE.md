@@ -54,6 +54,10 @@ rules that prevent breakage.
 - Search: no stemming/stopwords, in-memory corpus per invocation. Snapshot: greedy-skip
   packing (oversized section skipped, walk continues), chars/4 token estimate.
 - `scaffold()` refuses non-empty target without `--force` — don't remove.
+- OKF permissiveness (warnings instead of errors, root index.md `okf_version`) is opt-in per
+  vault via `okf_compat` (set by the okf preset) — never loosen strict validation globally.
+- Self-improvement is propose-only: agents draft into `agents/self-review/proposals/`
+  (templates/hooks/self-review.md), humans apply — no code path edits ALWAYS/NEVER/CLAUDE.md.
 
 ## Gotchas (edit-time traps)
 

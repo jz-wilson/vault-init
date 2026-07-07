@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildIndex, loadNoteMeta, notesInDir, type NoteMeta } from "../src/index.ts";
+import { buildIndex, buildRootIndex, loadNoteMeta, notesInDir, type NoteMeta } from "../src/index.ts";
 
 function note(overrides: Partial<NoteMeta>): NoteMeta {
   return { file: "x.md", title: "X", description: "", tags: [], type: "", updated: "", ...overrides };
@@ -18,13 +18,13 @@ test("buildIndex renders title, description, tags, type", () => {
   expect(out).toContain("the first letter");
   expect(out).toContain("tags: greek, letters");
   expect(out).toContain("type: concept");
-  expect(out).toContain("[[alpha|Alpha]]");
+  expect(out).toContain("[Alpha](alpha.md)");
 });
 
 test("buildIndex: note without description omits the description segment cleanly", () => {
   const notes = [note({ file: "bare.md", title: "Bare", type: "concept", updated: "2026-01-01" })];
   const out = buildIndex("concepts", notes, "default");
-  expect(out).toContain("[[bare|Bare]]");
+  expect(out).toContain("[Bare](bare.md)");
   expect(out).not.toContain("—  (");
 });
 
@@ -83,6 +83,16 @@ test("buildIndex is idempotent: identical input produces byte-identical output",
 test("buildIndex on empty notes list never throws and marks dir as empty", () => {
   expect(() => buildIndex("empty-dir", [], "default")).not.toThrow();
   expect(buildIndex("empty-dir", [], "default")).toContain("no notes yet");
+});
+
+// ---- OKF bundle-root index ----
+test("buildRootIndex stamps okf_version 0.1 frontmatter and links each dir's index.md", () => {
+  const out = buildRootIndex("my-vault", ["crm", "projects"]);
+  expect(out.startsWith('---\nokf_version: "0.1"\n---\n')).toBe(true);
+  expect(out).toContain("# my-vault");
+  expect(out).toContain("- [crm](crm/index.md)");
+  expect(out).toContain("- [projects](projects/index.md)");
+  expect(buildRootIndex("empty", [])).toContain("no indexed directories yet");
 });
 
 // ---- frontmatter-less tolerance (via loadNoteMeta / notesInDir on real files) ----

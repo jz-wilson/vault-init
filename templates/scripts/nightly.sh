@@ -11,9 +11,10 @@ bun scripts/validate-vault.ts
 bun scripts/index.ts
 bun scripts/dashboard.ts
 
-# Deterministic worklist of unprocessed clippings. Distillation is agent work
-# (see scripts/hooks/nightly-automation.md) — point VAULT_AGENT_CMD at your
-# runner to process it, e.g.:
+# Deterministic worklist: unprocessed clippings + pending self-review proposals.
+# Distillation and rule-change drafting are agent work (see scripts/hooks/
+# nightly-automation.md and scripts/hooks/self-review.md) — point VAULT_AGENT_CMD
+# at your runner to process it, e.g.:
 #   VAULT_AGENT_CMD='claude -p "process the vault nightly worklist per scripts/hooks/nightly-automation.md"'
 bun scripts/nightly.ts list
 if [ -n "${VAULT_AGENT_CMD:-}" ]; then

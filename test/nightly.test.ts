@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { derive } from "../src/config.ts";
 import { splitLines, parseFrontmatter, extractField } from "../src/frontmatter.ts";
-import { listUnprocessed, markProcessed } from "../src/nightly.ts";
+import { listUnprocessed, listPendingProposals, markProcessed } from "../src/nightly.ts";
 import { logTurn } from "../src/log-turn.ts";
 
 
@@ -34,6 +34,19 @@ test("listUnprocessed: returns only un-mirrored raw clippings, excludes .gitkeep
 test("listUnprocessed: missing wiki/raw yields empty list", () => {
   const dir = mkdtempSync(join(tmpdir(), "nt-"));
   expect(listUnprocessed(dir)).toEqual([]);
+});
+
+// ---- listPendingProposals ----
+test("listPendingProposals: missing dir yields empty; .md files sorted, non-md ignored", () => {
+  const dir = mkdtempSync(join(tmpdir(), "nt-"));
+  expect(listPendingProposals(dir)).toEqual([]);
+
+  const pdir = join(dir, "agents", "self-review", "proposals");
+  mkdirSync(pdir, { recursive: true });
+  writeFileSync(join(pdir, ".gitkeep"), "");
+  writeFileSync(join(pdir, "2026-07-06.md"), "proposal");
+  writeFileSync(join(pdir, "2026-07-01.md"), "older proposal");
+  expect(listPendingProposals(dir)).toEqual(["2026-07-01.md", "2026-07-06.md"]);
 });
 
 // ---- markProcessed: dry-run ----
@@ -65,7 +78,8 @@ test("markProcessed: apply performs mv + log.md append + commit, and does not pu
   expect(readFileSync(join(dir, "wiki", "processed", "clip.md"), "utf8")).toBe("clip content");
 
   const log = readFileSync(join(dir, "log.md"), "utf8");
-  expect(log).toContain(`- ${ymd(today)}: folded into concept note ([[wiki/processed/clip.md]])`);
+  expect(log).toContain(`## ${ymd(today)}`);
+  expect(log).toContain(`- **Update:** folded into concept note ([clip.md](wiki/processed/clip.md))`);
 
   // fully committed — nothing left dangling (proves markProcessed didn't leave a push pending either)
   const status = Bun.spawnSync(["git", "status", "--porcelain"], { cwd: dir });
@@ -77,6 +91,28 @@ test("markProcessed: apply performs mv + log.md append + commit, and does not pu
   // no remote configured — if markProcessed had attempted a push it would have thrown above
   const remotes = Bun.spawnSync(["git", "remote"], { cwd: dir });
   expect(remotes.stdout.toString().trim()).toBe("");
+});
+
+test("markProcessed: log.md groups entries under date headings, newest first", () => {
+  const dir = initGitVault();
+  for (const f of ["one.md", "two.md", "three.md"]) writeFileSync(join(dir, "wiki", "raw", f), f);
+  Bun.spawnSync(["git", "add", "-A"], { cwd: dir });
+  Bun.spawnSync(["git", "commit", "-q", "-m", "seed"], { cwd: dir });
+
+  const day1 = new Date("2026-07-05T12:00:00");
+  const day2 = new Date("2026-07-06T12:00:00");
+  markProcessed(dir, "one.md", "first", true, day1);
+  markProcessed(dir, "two.md", "second", true, day1);
+  markProcessed(dir, "three.md", "third", true, day2);
+
+  const log = readFileSync(join(dir, "log.md"), "utf8");
+  // newest day heading first
+  expect(log.indexOf("## 2026-07-06")).toBeLessThan(log.indexOf("## 2026-07-05"));
+  // newest entry first within a day
+  expect(log.indexOf("second")).toBeLessThan(log.indexOf("first"));
+  // exactly one heading per day
+  expect(log.match(/^## 2026-07-05$/gm)!.length).toBe(1);
+  expect(log).toContain("- **Update:** third ([three.md](wiki/processed/three.md))");
 });
 
 test("markProcessed: apply errors (does not throw silently) when raw file is missing", () => {

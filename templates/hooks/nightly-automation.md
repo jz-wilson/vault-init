@@ -36,6 +36,8 @@ bun scripts/nightly.ts process clip-2026-07-01.md \
 # → review the resulting commit(s) locally before pushing, or pass --push once you trust
 #   the automation:
 bun scripts/nightly.ts process clip-2026-07-02.md --log "..." --apply --push
+# → last, the self-review step (hooks/self-review.md): read verified agent logs, draft
+#   rule-change proposals into agents/self-review/proposals/ — propose-only, same invocation.
 ```
 
 ### systemd timer
@@ -92,4 +94,5 @@ bun scripts/nightly.ts process <file> --log "preview only"   # no --apply: print
 
 ## Related
 - [[log-turn-hook]] — the per-turn counterpart (journal, not raw clippings)
+- [[self-review]] — propose-only rule-improvement step riding the same nightly run
 - [[_format]] — note format + schema

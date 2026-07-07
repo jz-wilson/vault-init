@@ -18,7 +18,7 @@ export const OPERATIONAL = [
 ];
 
 interface Item { value: string; dir: string; bucket: "semantic" | "episodic" | "extra"; label: string; selected: boolean; }
-interface Preset { items: Item[]; }
+interface Preset { items: Item[]; okf_compat?: boolean; }
 
 function loadPreset(name: string): Preset {
   if (!name || /[\/\\]/.test(name) || name === "." || name === "..")
@@ -34,7 +34,7 @@ function safeJoin(base: string, rel: string): string {
   return full;
 }
 
-function buildConfig(name: string, items: Item[]) {
+function buildConfig(name: string, items: Item[], okfCompat = false) {
   const semantic: Record<string, string> = {};
   const episodic: Record<string, string> = {};
   const extra: string[] = [];
@@ -43,7 +43,8 @@ function buildConfig(name: string, items: Item[]) {
     else if (it.bucket === "episodic") episodic[it.value] = it.dir;
     else extra.push(it.dir);
   }
-  return { name, semantic_dirs: semantic, episodic_dirs: episodic, extra_dirs: extra };
+  return { name, semantic_dirs: semantic, episodic_dirs: episodic, extra_dirs: extra,
+    ...(okfCompat ? { okf_compat: true } : {}) };
 }
 
 function parseFlags(argv: string[]) {
@@ -74,7 +75,8 @@ async function interactive() {
     ],
   });
   if (p.isCancel(preset)) { p.cancel("cancelled"); process.exit(1); }
-  const items = loadPreset(preset as string).items;
+  const presetDef = loadPreset(preset as string);
+  const items = presetDef.items;
   const picked = await p.multiselect({
     message: "Directories (space to toggle, enter to confirm)",
     options: items.map((it) => ({ value: it.value, label: it.label, hint: it.bucket })),
@@ -102,7 +104,7 @@ async function interactive() {
     force = true;
   }
   try {
-    scaffold(target, buildConfig(name as string, chosen), true, force);
+    scaffold(target, buildConfig(name as string, chosen, presetDef.okf_compat === true), true, force);
   } catch (e: any) {
     p.cancel(e.message);
     process.exit(1);
@@ -195,7 +197,7 @@ function scaffold(target: string, config: ReturnType<typeof buildConfig>, exampl
   copyTpl(join(TEMPLATES, "scripts", "nightly.sh"), join(target, "scripts", "nightly.sh"));
   chmodSync(join(target, "scripts", "nightly.sh"), 0o755);
   // hook-wiring docs ship next to the scripts they wire; scripts/ is validator-skipped
-  for (const h of ["session-start-snapshot.md", "log-turn-hook.md", "nightly-automation.md"])
+  for (const h of ["session-start-snapshot.md", "log-turn-hook.md", "nightly-automation.md", "self-review.md"])
     copyTpl(join(TEMPLATES, "hooks", h), join(target, "scripts", "hooks", h));
   for (const doc of ["_format.md", "AGENTS.md", "README.md", "IDENTITY.md", "ALWAYS.md", "NEVER.md", "CLAUDE.md"]) copyTpl(join(TEMPLATES, "docs", doc), join(target, doc));
   copyTpl(join(TEMPLATES, "SEED-PROMPT.md"), join(target, "SEED-PROMPT.md"));
@@ -320,8 +322,9 @@ async function main() {
   const preset = (f.preset as string) || "blank";
   const target = resolve((f.dir as string) || join(homedir(), name));
   try {
-    const items = loadPreset(preset).items.filter((it) => it.selected);
-    scaffold(target, buildConfig(name, items), !f.noExamples, Boolean(f.force));
+    const presetDef = loadPreset(preset);
+    const items = presetDef.items.filter((it) => it.selected);
+    scaffold(target, buildConfig(name, items, presetDef.okf_compat === true), !f.noExamples, Boolean(f.force));
   } catch (e: any) {
     console.error(`error: ${e.message}`);
     process.exit(1);

@@ -66,7 +66,8 @@ export function notesInDir(dir: string): NoteMeta[] {
 
 function noteLine(n: NoteMeta): string {
   const base = n.file.replace(/\.md$/, "");
-  const link = n.title && n.title !== base ? `[[${base}|${n.title}]]` : `[[${base}]]`;
+  // markdown link, not wikilink — generated content uses OKF-portable syntax (validator accepts both)
+  const link = `[${n.title || base}](${n.file})`;
   const meta: string[] = [];
   if (n.type) meta.push(`type: ${n.type}`);
   if (n.tags.length) meta.push(`tags: ${n.tags.join(", ")}`);
@@ -103,6 +104,15 @@ export function buildIndex(dirName: string, notes: NoteMeta[], style: "default" 
     return `\n## ${type}\n\n` + items.map(noteLine).join("\n") + "\n";
   });
   return header + sections.join("");
+}
+
+/** OKF bundle-root index.md — the ONLY generated file carrying frontmatter, and the only
+ *  place `okf_version` appears (OKF v0.1 rule). Written only for okf_compat vaults. */
+export function buildRootIndex(vaultName: string, dirs: string[]): string {
+  const list = dirs.length
+    ? dirs.map((rel) => `- [${rel}](${rel}/index.md)`).join("\n")
+    : "_(no indexed directories yet)_";
+  return `---\nokf_version: "0.1"\n---\n\n${GENERATED_HEADER}\n\n# ${vaultName}\n\n${list}\n`;
 }
 
 function targetDirs(d: ReturnType<typeof loadFromScript>): string[] {
@@ -147,6 +157,11 @@ function main() {
     writeFileSync(join(full, "index.md"), buildIndex(rel, notesInDir(full), style), "utf8");
     console.log(`✓ index.md → ${rel}/`);
     count++;
+  }
+  if (d.cfg.okf_compat === true) {
+    const indexed = [...configuredDirs].filter((rel) => existsSync(join(vaultRoot, rel, "index.md"))).sort();
+    writeFileSync(join(vaultRoot, "index.md"), buildRootIndex(d.cfg.name, indexed), "utf8");
+    console.log("✓ index.md → / (okf_version 0.1)");
   }
   if (count === 0) console.log("no target directories with notes found");
 }

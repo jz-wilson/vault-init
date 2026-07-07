@@ -60,6 +60,13 @@ After a meaningful session, fold durable facts into semantic notes:
 `bun scripts/capture.ts --type <type> --note <name> "<dense fact>"`. Dense facts only.
 Episodic types (`decisions`, `incidents`) take dated bullets; the monthly file is automatic.
 
+### Self-improvement (propose-only)
+
+Recurring lessons from `status: completed` + `verified: true` logs may be drafted as rule-change
+proposals in `agents/self-review/proposals/YYYY-MM-DD.md` — see `scripts/hooks/self-review.md`.
+Never edit `ALWAYS.md`, `NEVER.md`, or `CLAUDE.md` directly; the operator applies accepted
+proposals by hand.
+
 ### Archival
 
 `bun scripts/consolidate.ts` lists archival candidates (completed + >90d, **not** gated on

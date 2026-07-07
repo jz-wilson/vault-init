@@ -1,4 +1,5 @@
 {
+  "okf_compat": true,
   "items": [
     { "value": "project", "dir": "projects", "bucket": "semantic", "label": "projects/ (ongoing work)", "selected": true },
     { "value": "person", "dir": "crm", "bucket": "semantic", "label": "crm/ (people you know)", "selected": true },

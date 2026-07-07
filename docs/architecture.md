@@ -69,6 +69,8 @@ vault-init/
 │
 ├── templates/                # static files copied into scaffolded vaults
 │   ├── presets/              # blank | homelab | sre | okf .json — Item[] {value,dir,bucket,label,selected}
+│   │                         #   okf.json also sets okf_compat: true → OKF v0.1 permissive validation
+│   │                         #   (unknown types + broken links warn, don't fail; root index.md gets okf_version)
 │   ├── docs/                 # _format.md, AGENTS.md, README.md, IDENTITY.md, ALWAYS.md, NEVER.md,
 │   │                         #   CLAUDE.md (imports @AGENTS/@ALWAYS/@NEVER — Claude Code reads only this name)
 │   ├── claude/settings.json  # scaffolded to <vault>/.claude/settings.json — SessionStart snapshot hook
@@ -76,7 +78,9 @@ vault-init/
 │   ├── ci/validate.yml       # scaffolded vault's own CI: full validator run (closes hook-bypass hole)
 │   ├── scripts/nightly.sh    # local scheduler target: validate → index → dashboard → worklist →
 │   │                         #   optional $VAULT_AGENT_CMD → git commit (never pushes)
-│   ├── hooks/*.md            # wiring docs: session-start-snapshot, log-turn-hook, nightly-automation
+│   ├── hooks/*.md            # wiring docs: session-start-snapshot, log-turn-hook, nightly-automation,
+│   │                         #   self-review (propose-only rule improvement — proposals surface in
+│   │                         #   nightly worklist; judgment is the invoking agent's, zero LLM here)
 │   ├── mcp/                  # README + mcp.json snippet for registering the MCP server
 │   └── SEED-PROMPT.md        # prompt for an AI to populate the fresh vault
 │

@@ -105,8 +105,15 @@ Main content. Episodic types use dated bullets: `- YYYY-MM-DD: fact`.
 1. `---` delimiters on their own lines; fields ordered `updated`, `tags`, `type`.
 2. H1 once, directly under frontmatter.
 3. `## Summary`, `## Notes`, `## Related` in that order; `_(none yet)_` when empty.
-4. No `file://` URLs or absolute paths (`/mnt/...`, `C:\...`) in bodies — use `[[wiki-links]]`. Code fences exempt.
+4. No `file://` URLs or absolute paths (`/mnt/...`, `C:\...`) in bodies — link notes with
+   `[[wiki-links]]` or relative markdown links (`[Title](dir/note.md)`); the validator resolves
+   both. Generated content (indexes, `log.md`) uses markdown links (OKF-portable). Code fences exempt.
 5. File ends with exactly one newline.
+
+Vaults scaffolded with `okf_compat: true` in `vault.config.json` (the OKF preset) follow
+Open Knowledge Format v0.1 permissive parsing: unknown `type` values and broken links are
+reported as warnings, not errors. The recommended type set is unchanged. The bundle-root
+`index.md` (generated) is the only file carrying `okf_version`.
 
 ## Related
 - [[AGENTS]] — agent operating protocol
