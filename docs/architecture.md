@@ -56,7 +56,8 @@ vault-init/
 │   ├── search.ts             # zero-dep BM25 lexical search, injectable ScoreFn seam
 │   ├── nightly.ts            # wiki/raw → wiki/processed worklist + auditable git mv + log.md append
 │   ├── link.ts               # register vault machine-wide with Claude Code: user-scope MCP +
-│   │                         #   global SessionStart hook + ~/.claude/CLAUDE.md pointer (idempotent merges)
+│   │                         #   ~/.claude/CLAUDE.md pointer (every vault); global SessionStart
+│   │                         #   snapshot hook only for the primary ($VAULT_DIR) vault (idempotent merges)
 │   │
 │   │   ── tier 2: package-only (NOT vendored) ──
 │   ├── init.ts               # ENTRY POINT: scaffolder CLI (interactive + --yes), setupNightly(),
@@ -97,7 +98,7 @@ vault-init/
 | `bunx vault-init` | `src/init.ts` `main()` → `interactive()` | clack wizard: name → preset → multiselect dirs → custom dirs → target dir → scaffold → nightly prompt → optional shell drop-in |
 | `bunx vault-init --yes [--dir --preset --name --force --no-examples --nightly]` | `src/init.ts` `main()` | non-interactive scaffold of the preset's `selected: true` items |
 | `bunx vault-init mcp [--dir <vault>]` | `src/init.ts` → lazy `import("./mcp.ts")` → `runMcp()` | stdio MCP server; `--dir` defaults to `$VAULT_DIR` (`requestedVaultDir()`, `src/config.ts`) |
-| `bunx vault-init link --dir <vault>` / `bun scripts/link.ts` | `src/init.ts` → lazy `import("./link.ts")` → `runLink()` | machine-wide Claude Code registration: user-scope MCP (`claude mcp add`), global SessionStart hook, `~/.claude/CLAUDE.md` pointer (all idempotent; `--dry-run`/`--skip-mcp` supported; `CLAUDE_CONFIG_DIR` respected) |
+| `bunx vault-init link --dir <vault>` / `bun scripts/link.ts` | `src/init.ts` → lazy `import("./link.ts")` → `runLink()` | machine-wide Claude Code registration: user-scope MCP (`claude mcp add`) + `~/.claude/CLAUDE.md` pointer for every vault; global SessionStart snapshot hook only when the vault is primary (`$VAULT_DIR` points at it, or `$VAULT_DIR` unset) — non-primary vaults link on-demand (all idempotent; `--dry-run`/`--skip-mcp` supported; `CLAUDE_CONFIG_DIR` respected) |
 | `bunx vault-init doctor [--dir <vault>]` | `src/init.ts` → lazy `import("./doctor.ts")` → `runDoctor()` | report-only diagnosis; `--fix` applies repairs (`--force` also overwrites drifted vendored scripts, implies `--fix`): re-vendor missing OPERATIONAL scripts, restore CLAUDE.md/.claude/settings.json/.mcp.json, hooksPath, $VAULT_DIR profile export, run `link` if unlinked. Vault resolution: `--dir` > cwd-if-vault > `$VAULT_DIR`. Package-only — repairs need package templates/src |
 | `bun scripts/<name>.ts` (inside a vault) | vendored copy of each tier-1 script | each has `if (import.meta.main) runMain(main)` — importable as a library AND runnable as a CLI |
 

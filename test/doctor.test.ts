@@ -1,7 +1,7 @@
 // doctor contract: finds and repairs a broken vault setup (missing vendored scripts,
 // missing Claude Code integration files, unlinked state), and is a no-op on a healthy one.
 import { test, expect, beforeAll, afterAll } from "bun:test";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -71,6 +71,30 @@ test("missing .mcp.json is fine on a linked vault (user-scope registration cover
   expect(out).toContain(".mcp.json absent — fine, vault is linked user-scope");
   expect(out).toContain("0 fixable");
   expect(existsSync(join(dir, ".mcp.json"))).toBe(false); // report mode + linked: never rewritten
+});
+
+test("doctor warns when the snapshot hook belongs to a non-primary vault", () => {
+  const r = Bun.spawnSync(["bun", "src/init.ts", "doctor", "--dir", dir, "--skip-mcp"], {
+    cwd: repo,
+    env: { ...process.env, CLAUDE_CONFIG_DIR: cfgDir, VAULT_DIR: join(tmpdir(), "some-other-vault") },
+  });
+  expect(r.exitCode).toBe(0);
+  expect(r.stdout.toString()).toContain("non-primary vault");
+  // report-only: the hook is not removed
+  const settings = JSON.parse(readFileSync(join(cfgDir, "settings.json"), "utf8"));
+  expect(JSON.stringify(settings.hooks.SessionStart)).toContain(join(dir, "scripts", "snapshot.ts"));
+});
+
+test("doctor --fix restores the snapshot hook for the primary vault", () => {
+  const sPath = join(cfgDir, "settings.json");
+  const s = JSON.parse(readFileSync(sPath, "utf8"));
+  delete s.hooks; // strip the hook; the CLAUDE.md pointer keeps the vault linked
+  writeFileSync(sPath, JSON.stringify(s, null, 2) + "\n");
+  const { code, out } = doctor("--fix");
+  expect(code).toBe(0);
+  expect(out).toContain("adding SessionStart snapshot hook (this is the primary vault)");
+  const after = JSON.parse(readFileSync(sPath, "utf8"));
+  expect(JSON.stringify(after.hooks.SessionStart)).toContain(join(dir, "scripts", "snapshot.ts"));
 });
 
 test("doctor refuses a non-vault dir with a clear error", () => {

@@ -15,7 +15,8 @@ rules that prevent breakage.
 - `bun src/init.ts --yes --dir <path> --preset sre|homelab|okf|blank [--force] [--no-examples] [--nightly]`
 - `bunx vault-init` — interactive scaffold · `bunx vault-init mcp --dir <vault>` — MCP server
 - `bunx vault-init link --dir <vault>` (or `bun run link` in vault) — register vault machine-wide
-  with Claude Code: user-scope MCP + global SessionStart hook + `~/.claude/CLAUDE.md` pointer
+  with Claude Code: user-scope MCP + `~/.claude/CLAUDE.md` pointer for every vault; the global
+  SessionStart snapshot hook only for the primary vault (`$VAULT_DIR`, unset counts as primary)
 - `bunx vault-init doctor [--dir <vault>] [--fix|--force|--skip-mcp]` — report-only by default;
   `--fix` repairs (re-vendor missing scripts, restore integration files, hooksPath, $VAULT_DIR
   export, link). `mcp` refuses to start for an unlinked vault and points here; `runMain` errors
