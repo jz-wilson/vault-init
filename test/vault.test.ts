@@ -101,6 +101,21 @@ test("validateVaultNote: bad type rejected, good accepted", () => {
   expect(msgs).toContain("'type' must be one of");
 });
 
+test("validateVaultNote okf_compat: unknown type demoted to warning, strict mode unchanged", () => {
+  const dir = mkdtempSync(join(tmpdir(), "vt-"));
+  const today = ymd(new Date());
+  const f = join(dir, "n.md");
+  writeFileSync(f, `---\nupdated: ${today}\ntags: [x]\ntype: nonsense\n---\n\n# N\n\n## Summary\nx\n\n## Notes\n- y\n\n## Related\n_(none yet)_\n`);
+
+  const [, errs, warns] = validateVaultNote(f, dir, D.VALID_TYPES, true);
+  expect(errs).toEqual([]);
+  expect(warns.map((w) => w[1]).join(" ")).toContain("'type' must be one of");
+
+  const [, strictErrs, strictWarns] = validateVaultNote(f, dir, D.VALID_TYPES);
+  expect(strictErrs.length).toBe(1);
+  expect(strictWarns).toEqual([]);
+});
+
 // ---- capture ----
 test("capture: create + insertBullet round-trips and bumps updated", () => {
   const dir = mkdtempSync(join(tmpdir(), "vt-"));

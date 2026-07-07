@@ -92,4 +92,5 @@ bun scripts/nightly.ts process <file> --log "preview only"   # no --apply: print
 
 ## Related
 - [[log-turn-hook]] — the per-turn counterpart (journal, not raw clippings)
+- [[self-review]] — propose-only rule-improvement step riding the same nightly run
 - [[_format]] — note format + schema

@@ -93,7 +93,7 @@ pushes; add that yourself once you trust the automation.
 |---|---|
 | `sre` | runbooks, services, projects, incidents, decisions, postmortems |
 | `homelab` | projects, infrastructure, decisions (+ optional glossary, personal, crm, skills, journal, wiki) |
-| `okf` | wiki, crm, journal, skills — agentic second brain |
+| `okf` | wiki, crm, journal, skills — agentic second brain, [OKF v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog)-permissive validation (`okf_compat: true`) |
 | `blank` | projects only |
 
 Pick any subset interactively, add custom dirs, or edit `vault.config.json` after — adding a

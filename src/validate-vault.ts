@@ -33,13 +33,16 @@ function validateTags(fm: string[], fmStart: number): LineError[] {
   return errors;
 }
 
-export function validateVaultNote(path: string, vaultRoot: string, validTypes: Set<string>): [string, LineError[]] {
+/** okfCompat=true (OKF permissive parsing): an unknown 'type' is a warning (third tuple slot),
+ *  not an error — the recommended set stays UNIVERSAL_TYPES + configured dirs either way. */
+export function validateVaultNote(path: string, vaultRoot: string, validTypes: Set<string>, okfCompat = false): [string, LineError[], LineError[]] {
   const errors: LineError[] = [];
+  const warnings: LineError[] = [];
   const rel = relative(vaultRoot, path);
 
   const { errors: shapeErrors, shape } = validateCommonNoteShape(path);
   errors.push(...shapeErrors);
-  if (shape === null) return [rel, errors];
+  if (shape === null) return [rel, errors, warnings];
   const { fm, body, closeLineNo, fmStart } = shape;
 
   const updatedVal = extractField(fm, "updated");
@@ -54,7 +57,7 @@ export function validateVaultNote(path: string, vaultRoot: string, validTypes: S
   const typeVal = extractField(fm, "type");
   if (typeVal === null) errors.push([fmStart, "missing required frontmatter field: 'type'"]);
   else if (!validTypes.has(typeVal))
-    errors.push([fmLineNo(fm, "type", fmStart), `'type' must be one of ${sortedTypes(validTypes)}, got: '${typeVal}'`]);
+    (okfCompat ? warnings : errors).push([fmLineNo(fm, "type", fmStart), `'type' must be one of ${sortedTypes(validTypes)}, got: '${typeVal}'`]);
 
   // person notes layer met:/last_contact: on top of the common shape, mirroring how
   // validate-logs.ts layers agent-log-specific fields (same error message style).
@@ -78,7 +81,7 @@ export function validateVaultNote(path: string, vaultRoot: string, validTypes: S
     if (!bodyText.includes(section)) errors.push([bodyStart, `body missing required section '${section}'`]);
 
   for (const e of checkBodyPaths(body, bodyStart)) errors.push(e);
-  return [rel, errors];
+  return [rel, errors, warnings];
 }
 
 export function shouldSkip(rel: string): boolean {
@@ -166,7 +169,12 @@ function main() {
   const linksOnly = argv.includes("--links");
   const args = argv.filter((a) => a !== "--json" && a !== "--links");
   const vaultRoot = resolve(import.meta.dir, "..");
-  const { VALID_TYPES } = loadFromScript(import.meta.dir);
+  const d = loadFromScript(import.meta.dir);
+  const VALID_TYPES = d.VALID_TYPES;
+  // OKF permissive mode (vault.config.json okf_compat: true): unknown types and broken
+  // links are reported as warnings and never fail the run — mirrors OKF v0.1's
+  // "tolerate unknown types / unresolvable links" parsing rule.
+  const okfCompat = d.cfg.okf_compat === true;
   const explicit = args.length > 0;
 
   // --links: whole-vault broken-link check only, no per-file schema validation.
@@ -174,14 +182,19 @@ function main() {
   // it can't schema-flag skip-files (README etc.) the way explicit file args would.
   if (linksOnly) {
     const broken = checkLinks(vaultRoot).broken;
+    const fatal = okfCompat ? 0 : broken.length;
     if (json) {
-      console.log(JSON.stringify({ ok: broken.length === 0, errorCount: broken.length,
-        errors: broken.map(([path, line, msg]) => ({ path, line, msg })) }, null, 2));
-      process.exit(broken.length === 0 ? 0 : 1);
+      const list = broken.map(([path, line, msg]) => ({ path, line, msg }));
+      console.log(JSON.stringify(okfCompat
+        ? { ok: true, errorCount: 0, errors: [], warningCount: list.length, warnings: list }
+        : { ok: list.length === 0, errorCount: list.length, errors: list }, null, 2));
+      process.exit(fatal === 0 ? 0 : 1);
     }
-    for (const [path, line, msg] of broken) console.log(`${path}:${line}: ${msg}`);
-    console.log(broken.length === 0 ? "✓ links ok" : `✗ ${broken.length} broken link(s)`);
-    process.exit(broken.length === 0 ? 0 : 1);
+    for (const [path, line, msg] of broken) console.log(`${path}:${line}: ${okfCompat ? "warning: " : ""}${msg}`);
+    if (fatal === 0)
+      console.log(broken.length ? `✓ links ok (${broken.length} warning(s) — okf_compat)` : "✓ links ok");
+    else console.log(`✗ ${broken.length} broken link(s)`);
+    process.exit(fatal === 0 ? 0 : 1);
   }
 
   const targets = explicit
@@ -189,6 +202,7 @@ function main() {
     : [...new Bun.Glob("**/*.md").scanSync(vaultRoot)].map((p) => resolve(vaultRoot, p)).sort();
 
   const errors: { path: string; line: number; msg: string }[] = [];
+  const warnings: { path: string; line: number; msg: string }[] = [];
   let count = 0;
   for (const path of targets) {
     if (!existsSync(path)) {
@@ -199,27 +213,32 @@ function main() {
     // shouldSkip is a full-scan filter — an explicitly named file is always checked.
     if (!explicit && shouldSkip(rel)) continue;
 
-    const [r, errs] = isAgentLog(path)
+    const [r, errs, warns = []] = isAgentLog(path)
       ? validateAgentLog(path, vaultRoot)
-      : validateVaultNote(path, vaultRoot, VALID_TYPES);
+      : validateVaultNote(path, vaultRoot, VALID_TYPES, okfCompat);
     count++;
     for (const [ln, msg] of errs) errors.push({ path: r, line: ln, msg });
+    for (const [ln, msg] of warns) warnings.push({ path: r, line: ln, msg });
   }
 
   // Link health is a whole-vault property — skipped in explicit (changed-files) mode
   // to keep errors scoped to the named files. Pre-commit covers links via `--links`;
   // CI's full scan is the backstop.
   if (!explicit)
-    for (const [path, line, msg] of checkLinks(vaultRoot).broken) errors.push({ path, line, msg });
+    for (const [path, line, msg] of checkLinks(vaultRoot).broken)
+      (okfCompat ? warnings : errors).push({ path, line, msg });
 
   if (json) {
-    console.log(JSON.stringify({ ok: errors.length === 0, count, errorCount: errors.length, errors }, null, 2));
+    const out: Record<string, unknown> = { ok: errors.length === 0, count, errorCount: errors.length, errors };
+    if (okfCompat) { out.warningCount = warnings.length; out.warnings = warnings; }
+    console.log(JSON.stringify(out, null, 2));
     process.exit(errors.length === 0 ? 0 : 1);
   }
 
+  for (const w of warnings) console.log(`${w.path}:${w.line}: warning: ${w.msg}`);
   for (const e of errors) console.log(`${e.path}:${e.line}: ${e.msg}`);
   if (errors.length === 0) {
-    console.log(`✓ ${count} files validated, 0 errors`);
+    console.log(`✓ ${count} files validated, 0 errors${warnings.length ? ` (${warnings.length} warning(s) — okf_compat)` : ""}`);
     process.exit(0);
   }
   console.log(`✗ ${count} files validated, ${errors.length} errors found`);
