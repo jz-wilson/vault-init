@@ -17,12 +17,16 @@ nothing here ever edits `ALWAYS.md`, `NEVER.md`, or `CLAUDE.md` directly.
    evidence, never as the sole basis for a proposal.
 2. **Extract recurring lessons.** One-off events are not rules. Look for the same failure
    mode, workaround, or convention appearing across ≥2 independent runs.
-3. **Draft a proposal.** Write `agents/self-review/proposals/YYYY-MM-DD.md` (create the
+3. **Check what's already pending.** Read every file in `agents/self-review/proposals/`
+   first — a lesson with a pending proposal is not re-proposed. If new runs add evidence
+   for a pending one, append the new log links to that proposal instead of drafting a
+   duplicate. (This step runs nightly; without this check the same lesson piles up daily.)
+4. **Draft a proposal.** Write `agents/self-review/proposals/YYYY-MM-DD.md` (create the
    directory if missing; one file per day, append if it exists). For each proposed change:
    - the exact diff-style edit to `ALWAYS.md`, `NEVER.md`, or `CLAUDE.md`
    - the evidence: links to the agent logs that motivated it
    - blast radius: what behavior changes if adopted
-4. **Stop.** Do not apply the edit. Do not touch the rule files.
+5. **Stop.** Do not apply the edit. Do not touch the rule files.
 
 ### Human approval
 
